@@ -71,6 +71,17 @@ app.include_router(admin_router)
 app.include_router(audio_router)
 
 
+@app.get("/", tags=["Root"])
+def root():
+    """Root welcome message."""
+    return {
+        "message": "Netrasaathi API is running",
+        "docs": "/docs",
+        "health": "/health",
+        "status": "active"
+    }
+
+
 @app.get("/health", tags=["Health"])
 def health_check():
     """Service health probe for load balancers and deployment verification."""
