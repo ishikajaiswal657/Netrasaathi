@@ -3,7 +3,7 @@
 import React, { useSyncExternalStore } from 'react';
 import { isMockModeActive, setMockModeActive } from '@/lib/api';
 import { useAnnounce } from '@/components/accessibility/LiveAnnouncer';
-import { Activity, Database, RefreshCw } from 'lucide-react';
+import { Database, RefreshCw } from 'lucide-react';
 
 const subscribeStorage = (callback: () => void) => {
   if (typeof window === 'undefined') return () => {};
@@ -39,30 +39,9 @@ export function DemoBanner() {
     window.location.reload();
   };
 
+  // In live production mode, hide the debug banner completely so the UI is clean and professional
   if (!isMock) {
-    return (
-      <aside
-        aria-label="API connection mode"
-        className="bg-slate-950 border-b border-slate-800/80 px-4 py-1.5 text-xs text-slate-300 flex items-center justify-between"
-      >
-        <span className="flex items-center gap-2">
-          <Activity className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
-          <span className="font-medium text-slate-300">
-            Backend Status: <span className="text-emerald-400 font-semibold">Connected</span>
-          </span>
-          <span className="text-slate-500">•</span>
-          <code className="font-mono bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded text-[11px] text-cyan-300">
-            {process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}
-          </code>
-        </span>
-        <button
-          onClick={toggleMockMode}
-          className="text-cyan-400 hover:text-cyan-300 font-semibold text-xs underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-cyan-400 rounded px-1.5 py-0.5 cursor-pointer"
-        >
-          Switch to Offline Demo Mode
-        </button>
-      </aside>
-    );
+    return null;
   }
 
   return (
