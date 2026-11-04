@@ -1,1 +1,2 @@
-# Marks the app directory as a Python package
+"""Netrasaathi backend application package."""
+

@@ -1,0 +1,172 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --card-bg: #ffffff;
+  --card-border: #e2e8f0;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* Light Coursera / Khan Academy Professional Educational Canvas */
+.bg-mesh-pattern {
+  background-color: #f8fafc;
+  background-image: 
+    radial-gradient(circle at 10% 8%, rgba(219, 234, 254, 0.7) 0%, transparent 40%),
+    radial-gradient(circle at 90% 12%, rgba(224, 231, 255, 0.6) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(240, 249, 255, 0.9) 0%, transparent 55%),
+    radial-gradient(circle at 15% 90%, rgba(254, 243, 199, 0.5) 0%, transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(204, 251, 241, 0.45) 0%, transparent 40%);
+  background-attachment: fixed;
+}
+
+/* Clean Professional Educational Surface Classes */
+.glass-panel, .edu-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.02);
+}
+
+.glass-panel-interactive, .edu-card-interactive {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-panel-interactive:hover, .edu-card-interactive:hover {
+  background: #ffffff;
+  border-color: #93c5fd;
+  box-shadow: 0 12px 28px -4px rgba(37, 99, 235, 0.12);
+  transform: translateY(-2px);
+}
+
+.glass-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.glass-input {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+  transition: all 0.2s ease;
+}
+
+.glass-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  outline: none;
+}
+
+/* High-contrast focus rings for universal accessibility */
+:focus-visible {
+  outline: 2px solid #2563eb !important;
+  outline-offset: 3px !important;
+  border-radius: 0.5rem;
+}
+
+/* Screen reader only utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Animated multi-color audio waveform bars for reading indicator */
+@keyframes audio-bar-pulse {
+  0%, 100% {
+    transform: scaleY(0.25);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.wave-bar {
+  display: inline-block;
+  width: 3.5px;
+  height: 20px;
+  border-radius: 9999px;
+  transform-origin: bottom;
+}
+
+.wave-bar-1 { 
+  background: linear-gradient(to top, #2563eb, #38bdf8); 
+  animation: audio-bar-pulse 0.8s ease-in-out infinite 0.1s; 
+}
+.wave-bar-2 { 
+  background: linear-gradient(to top, #4f46e5, #818cf8); 
+  animation: audio-bar-pulse 0.8s ease-in-out infinite 0.3s; 
+}
+.wave-bar-3 { 
+  background: linear-gradient(to top, #0284c7, #38bdf8); 
+  animation: audio-bar-pulse 0.8s ease-in-out infinite 0.5s; 
+}
+.wave-bar-4 { 
+  background: linear-gradient(to top, #0d9488, #2dd4bf); 
+  animation: audio-bar-pulse 0.8s ease-in-out infinite 0.2s; 
+}
+.wave-bar-5 { 
+  background: linear-gradient(to top, #2563eb, #60a5fa); 
+  animation: audio-bar-pulse 0.8s ease-in-out infinite 0.4s; 
+}
+
+/* 3D Avatar slow spin and subtle float animations */
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 12s linear infinite;
+}
+
+@keyframes bounce-subtle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.animate-bounce-subtle {
+  animation: bounce-subtle 3s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.04);
+  }
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 6s ease-in-out infinite;
+}

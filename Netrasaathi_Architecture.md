@@ -15,7 +15,7 @@
    |-- Upload service  --> file storage (per-user folders)
    |-- Page reader     --> PyMuPDF + Tesseract OCR
    |-- Privacy layer   --> Presidio + regex + image redaction
-   |-- Explainer       --> Vision AI model (Anthropic API)
+   |-- Explainer       --> Vision AI model (OpenAI API)
    |-- Q&A service     --> TF-IDF page search + AI model
    |-- Audit logger
             |
@@ -35,7 +35,7 @@
 | OCR | Tesseract (pytesseract) | Free, runs locally, gives word positions for redaction |
 | PII detection | Presidio + custom regex | Presidio finds common personal data, regex covers Aadhaar, PAN, Indian phones |
 | Image redaction | Pillow | Draws black boxes over personal data on the page image |
-| Visual understanding | Vision AI model via Anthropic API | Handles diagrams, flowcharts, graphs, tables without training your own model |
+| Visual understanding | Vision-capable OpenAI model via OpenAI API | Handles diagrams, flowcharts, graphs, tables without training your own model |
 | Question search | scikit-learn TF-IDF | Simple way to pick the most relevant pages before asking the AI |
 | Auth | JWT + bcrypt | Standard session tokens and safe password storage |
 | Packaging | Docker, docker-compose | One command to run everything |
@@ -159,6 +159,7 @@ netrasaathi/
 | 9 | Docker and demo |
 
 ## 11. Things to decide early
-- Which vision model name to use. Keep it in the MODEL_NAME setting so it is easy to change.
+- Which OpenAI vision model to use. Keep the name in MODEL_NAME and the key in OPENAI_API_KEY, both in .env, so the model is easy to change.
 - Where uploaded files are stored. Start with a local folder, move to cloud storage later if needed.
 - How many pages to process at once. Start with one page at a time to keep costs down.
+
