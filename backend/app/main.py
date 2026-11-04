@@ -1,15 +1,28 @@
 import os
 import sys
+import types
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-# Ensure project root and backend dir are in sys.path
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
-_BACKEND_DIR = Path(__file__).resolve().parent.parent
-if str(_BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(_BACKEND_DIR))
+# Ensure project root, backend dir, and app dir are in sys.path
+_FILE_DIR = Path(__file__).resolve().parent
+_BACKEND_DIR = _FILE_DIR.parent
+_PROJECT_ROOT = _BACKEND_DIR.parent
+
+for _p in [_PROJECT_ROOT, _BACKEND_DIR, _FILE_DIR]:
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
+
+# Ensure 'backend' module alias exists even if running directly inside /app or backend/
+if "backend" not in sys.modules:
+    try:
+        import app as _app_pkg
+        _b_mod = types.ModuleType("backend")
+        _b_mod.app = _app_pkg
+        sys.modules["backend"] = _b_mod
+        sys.modules["backend.app"] = _app_pkg
+    except Exception:
+        pass
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -60,5 +73,5 @@ app.include_router(audio_router)
 
 @app.get("/health", tags=["Health"])
 def health_check():
-    """Simple endpoint to verify server status and responsiveness."""
-    return {"status": "ok", "service": "Netrasaathi API", "version": "1.0.0"}
+    """Service health probe for load balancers and deployment verification."""
+    return {"status": "ok", "service": "Netrasaathi API"}
