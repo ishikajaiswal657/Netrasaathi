@@ -24,7 +24,10 @@ import {
   MOCK_AUDIT_LOGS,
 } from './mock-data';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+const BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://localhost:8000';
 const MOCK_STORAGE_KEY = 'netrasaathi_use_mock_mode';
 
 /**

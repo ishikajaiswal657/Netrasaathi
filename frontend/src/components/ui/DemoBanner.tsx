@@ -52,7 +52,7 @@ export function DemoBanner() {
           </span>
           <span className="text-slate-500">•</span>
           <code className="font-mono bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded text-[11px] text-cyan-300">
-            {process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}
+            {process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}
           </code>
         </span>
         <button
