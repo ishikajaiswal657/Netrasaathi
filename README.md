@@ -1,27 +1,27 @@
 # Netrasaathi (नेत्रसाथी)
 ## Universal Voice-First Assistive STEM Learning Platform
 
-Netrasaathi is an accessible, voice-first web platform engineered for visually, hearing, and physically impaired students. It transforms complex visual study materials (diagrams, flowcharts, graphs, formulas, tables) into structured, spoken audio explanations and synchronized live captions in multiple languages, with hands-free voice commands and zero-hallucination grounded Q&A.
+Netrasaathi is an accessible, voice-first web platform engineered for visually, hearing, and physically impaired students. It transforms complex visual study materials (diagrams, flowcharts, graphs, formulas, tables) into structured, spoken audio explanations and synchronized live captions in multiple languages, with hands-free voice commands and grounded Q&A.
 
 ---
 
 ## Core Capabilities & Architectural Pillars
 
-1. **Universal Accessibility (WCAG 2.1 AAA)**:
-   * Futuristic Obsidian Glassmorphism dark theme (`#070714`) providing an ultra-high contrast ratio (>18:1), well beyond the 7:1 AAA standard.
+1. **Accessibility & Usability**:
+   * Obsidian dark theme (`#070714`) providing high contrast ratios for readability.
    * Full keyboard navigation without mouse: `Space` (Play/Pause), `N` (Next Card), `P` (Previous Card), `R` (Repeat), `M` (Stop), `C` (Voice Commands), `V` (Direct Voice Ask), `H` (Voice Guide).
    * Skip-to-content bypass link for screen readers, ARIA live regions for audio feedback, and visual frequency waveform meters for deaf or hard-of-hearing students.
 
-2. **Zero-Content Privacy Layer (FR16 & PRD)**:
+2. **Privacy Layer (FR16 & PRD)**:
    * Automatic redaction of sensitive Indian and global PII (Aadhaar numbers, PAN cards, phone numbers, email addresses) using Microsoft Presidio and spaCy NLP before external AI processing.
    * Solid opaque black burn-in image redaction on 150 DPI page scans.
    * Audit trail records timestamps and actions only, strictly omitting raw document text or student question transcripts.
 
 3. **Multi-Modal Visual Understanding (OpenAI Vision AI)**:
-   * Intelligent extraction and classification of 6 block types: `diagram`, `flowchart`, `graph`, `table`, `formula`, and `text`.
-   * Deterministic offline fallback engine providing step-by-step plain English explanations when external APIs are offline.
+   * Extraction and classification of 6 block types: `diagram`, `flowchart`, `graph`, `table`, `formula`, and `text`.
+   * Clear error handling when external AI services are offline.
 
-4. **Universal Spoken Audio Reader & Multilingual Support**:
+4. **Spoken Audio Reader & Multilingual Support**:
    * Client-side Web Speech synthesis supporting Indian English, US English, Hindi, Bengali, Tamil, Telugu, Marathi, and Spanish.
    * Real-time word-boundary tracking with synchronized highlighted captions for deaf and hard-of-hearing learners.
 
@@ -35,8 +35,8 @@ Netrasaathi is an accessible, voice-first web platform engineered for visually, 
      * Speed: *"slower"*, *"dheere"*, *"faster"*, *"tez"*, *"jaldi"*
      * Assistance: *"help"*, *"madad"*, *"captions"*, *"language"*, *"bhasha"*
 
-6. **Grounded Q&A Engine (Zero Hallucination)**:
-   * TF-IDF passage retrieval and cosine similarity ranking strictly constrained to uploaded student study notes.
+6. **Grounded Q&A Engine**:
+   * Answers come only from your uploaded material using TF-IDF passage retrieval and cosine similarity ranking.
    * Exact page number citations (*"According to Page 1..."*) with honest out-of-scope rejection for non-syllabus questions.
 
 7. **Direct Concept Explainer (No Upload Required)**:
@@ -150,7 +150,7 @@ Validates configuration, bcrypt hashing, JWT authentication, multi-tenant docume
 *Expected output*: `Ran 44 tests in ~21s ... OK`
 
 ### Frontend Unit Tests (19 Tests)
-Validates formatting utilities, screen-reader ARIA labels, voice command recognition in English and regional languages, multi-language voice support, zero-content audit validation, WCAG AAA contrast ratio calculation, and unique single-key keyboard bindings:
+Validates formatting utilities, screen-reader ARIA labels, voice command recognition in English and regional languages, multi-language voice support, audit log privacy validation, contrast ratio calculation, and unique single-key keyboard bindings:
 
 ```powershell
 npm test --prefix frontend
@@ -188,6 +188,6 @@ npm run build --prefix frontend
 ## Security Compliance & Privacy Invariants
 
 * **FR14 - Multi-Tenant Isolation**: Every database query on `/documents` strictly filters by the authenticated `user_id`. Students can never view, download, or query another student's courseware.
-* **FR16 - Zero-Content Audit Trails**: Audit tables store `id`, `user_id`, `action`, `document_id`, `ip_address`, and `created_at`. No raw document text, OCR transcript, or student question string is ever logged.
+* **FR16 - Privacy-Preserving Audit Trails**: Audit tables store `id`, `user_id`, `action`, `document_id`, `ip_address`, and `created_at`. No raw document text, OCR transcript, or student question string is ever logged.
 * **PII Defense-in-Depth**: Indian national IDs (Aadhaar, PAN), phone numbers, and emails are identified using Microsoft Presidio and permanently redacted on disk with solid opaque black Pillow rectangles prior to multi-modal analysis.
-* **Zero Hallucination Guardrails**: Document Q&A queries are ranked via TF-IDF cosine similarity against document pages. Questions exceeding the out-of-scope similarity threshold are rejected with an honest statement rather than making up facts.
+* **Groundedness Guardrails**: Answers come only from your uploaded material. Document Q&A queries are ranked via TF-IDF cosine similarity against document pages. Questions exceeding the out-of-scope similarity threshold are rejected with an honest statement rather than making up facts.

@@ -46,7 +46,7 @@ app.dependency_overrides[get_db] = override_get_db
 class TestAdminSecurityAndAuditLogs(unittest.TestCase):
     """
     Test suite for Phase 8: Role-based access control (RBAC),
-    audit trail inspection, operational statistics, and zero-content privacy guarantees.
+    audit trail inspection, operational statistics, and privacy guarantees.
     """
 
     @classmethod

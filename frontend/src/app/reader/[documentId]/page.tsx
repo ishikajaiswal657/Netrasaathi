@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, isMockModeActive } from '@/lib/api';
 import { ExplanationBlock, PageBlocksResponse } from '@/lib/types';
 import {
   speakText,
@@ -555,6 +555,21 @@ function ReaderView() {
             </button>
           </div>
         </div>
+
+        {/* Sample Content Banner if Mock Mode is Active */}
+        {isMockModeActive() && (
+          <div
+            role="status"
+            className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900 shadow-xs"
+          >
+            <p className="text-sm font-semibold">
+              Sample content, not your document
+            </p>
+            <p className="text-xs text-amber-800 mt-0.5">
+              You are viewing offline sample material for testing and demonstration purposes.
+            </p>
+          </div>
+        )}
 
         {/* Live Hands-Free Voice HUD Banner */}
         {isVoiceCommandsActive && (

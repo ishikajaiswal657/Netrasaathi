@@ -20,7 +20,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased dark">
       <body className="min-h-full flex flex-col bg-[#070714] text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
-        {/* WCAG AAA Skip Link for Screen Readers and Keyboard Navigation */}
+        {/* Skip Link for Screen Readers and Keyboard Navigation */}
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-indigo-600 focus:text-white focus:rounded-xl focus:font-bold focus:shadow-2xl focus:outline-hidden focus:ring-4 focus:ring-indigo-400"
@@ -60,7 +60,7 @@ export default function RootLayout({
                 </p>
               </div>
               <p className="text-xs text-slate-500">
-                WCAG 2.1 AAA Compliant. Zero-Content Privacy Architecture.
+                Keyboard and screen reader support. Personal data is hidden before AI processing.
               </p>
             </div>
           </footer>

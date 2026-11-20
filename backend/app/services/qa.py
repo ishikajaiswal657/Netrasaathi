@@ -35,7 +35,7 @@ class QAService:
     """
     Intelligent Grounded Q&A Service for Netrasaathi.
     Uses TF-IDF retrieval across document passages and OpenAI synthesis to answer
-    student questions strictly using the document's content with zero hallucinations.
+    student questions strictly using the document's content, grounded in verified text passages.
     """
 
     @classmethod

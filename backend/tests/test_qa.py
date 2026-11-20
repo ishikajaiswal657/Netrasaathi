@@ -16,7 +16,7 @@ from backend.app.services.qa import PassageChunk, QAService
 class TestQAService(unittest.TestCase):
     """
     Unit tests for Phase 6: Intelligent Grounded Q&A Engine.
-    Tests passage chunking, TF-IDF retrieval, zero-hallucination groundedness,
+    Tests passage chunking, TF-IDF retrieval, groundedness,
     multi-tenant isolation, and audit trail privacy.
     """
 
@@ -169,7 +169,7 @@ class TestQAService(unittest.TestCase):
         self.assertIn("SYN", answer)
 
     def test_out_of_scope_question_returns_not_found(self):
-        """Questions on topics not present in the document must be gracefully rejected without hallucination."""
+        """Questions on topics not present in the document must be gracefully rejected."""
         answer, relevant_pages = QAService.answer_question(
             document=self.document,
             question="What is the capital city of Australia or France?",

@@ -200,24 +200,40 @@ export default function UploadPage() {
           </div>
         </div>
 
-        {/* Error Alert */}
+        {/* Error Alert with Retry */}
         {errorMessage && (
           <div
             role="alert"
-            className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start gap-3 shadow-xs"
+            className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs"
           >
-            <AlertCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" aria-hidden="true" />
-            <div className="flex-1">
-              <strong className="font-bold block text-sm text-rose-900">Upload Issue:</strong>
-              <p className="text-xs">{errorMessage}</p>
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" aria-hidden="true" />
+              <div>
+                <strong className="font-bold block text-sm text-rose-900">Upload Issue:</strong>
+                <p className="text-xs text-rose-800">{errorMessage}</p>
+              </div>
             </div>
-            <button
-              onClick={() => setErrorMessage('')}
-              className="p-1 rounded-lg text-rose-600 hover:text-rose-900 hover:bg-rose-100"
-              aria-label="Dismiss error notification"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2 self-end sm:self-center">
+              {file && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleSubmit}
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs py-1.5 px-3 rounded-lg cursor-pointer"
+                  aria-label="Retry upload with the currently selected file"
+                >
+                  Retry Upload
+                </Button>
+              )}
+              <button
+                type="button"
+                onClick={() => setErrorMessage('')}
+                className="p-1.5 rounded-lg text-rose-600 hover:text-rose-900 hover:bg-rose-100 cursor-pointer"
+                aria-label="Dismiss error notification"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         )}
 

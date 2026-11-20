@@ -134,7 +134,7 @@ export default function HomePage() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-slate-100 text-left">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span className="text-xs font-bold text-slate-700">WCAG AAA Ready</span>
+                  <span className="text-xs font-bold text-slate-700">Screen Reader Ready</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0" />
@@ -146,7 +146,7 @@ export default function HomePage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-purple-600 shrink-0" />
-                  <span className="text-xs font-bold text-slate-700">Zero Cloud Leak</span>
+                  <span className="text-xs font-bold text-slate-700">Personal Data Hidden</span>
                 </div>
               </div>
             </div>

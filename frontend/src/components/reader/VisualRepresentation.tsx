@@ -420,7 +420,7 @@ export function VisualRepresentation({
               <Database className="h-5 w-5" />
             </div>
             <span className="font-extrabold text-xs text-slate-900">Isolated Storage</span>
-            <span className="text-[11px] text-slate-600">Encrypted multi-tenant store with zero-content audit logs.</span>
+            <span className="text-[11px] text-slate-600">Encrypted multi-tenant store with audit logs omitting document text.</span>
           </div>
         </div>
       </div>

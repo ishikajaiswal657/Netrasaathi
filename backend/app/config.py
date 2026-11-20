@@ -34,8 +34,8 @@ try:
 
         # AI Vision & Reasoning (OpenAI API)
         OPENAI_API_KEY: str = ""
-        MODEL_NAME: str = "gpt-4o"
-        OPENAI_VISION_MODEL: str = "gpt-4o"
+        MODEL_NAME: str = "gpt-4o-mini"
+        OPENAI_VISION_MODEL: str = "gpt-4o-mini"
         OPENAI_TTS_MODEL: str = "tts-1-hd"
         OPENAI_TTS_VOICE: str = "nova"
 
@@ -81,8 +81,8 @@ except ImportError:
         ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 
         OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
-        MODEL_NAME: str = os.getenv("MODEL_NAME", "gpt-4o")
-        OPENAI_VISION_MODEL: str = os.getenv("OPENAI_VISION_MODEL", "gpt-4o")
+        MODEL_NAME: str = os.getenv("MODEL_NAME", "gpt-4o-mini")
+        OPENAI_VISION_MODEL: str = os.getenv("OPENAI_VISION_MODEL", "gpt-4o-mini")
         OPENAI_TTS_MODEL: str = os.getenv("OPENAI_TTS_MODEL", "tts-1-hd")
         OPENAI_TTS_VOICE: str = os.getenv("OPENAI_TTS_VOICE", "nova")
 

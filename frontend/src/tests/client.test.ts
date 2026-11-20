@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { formatBytes, getBlockTypeDetails, getStatusDetails } from '../lib/utils';
 import { parseVoiceCommand, SUPPORTED_LANGUAGES } from '../lib/speech';
+import { shouldShowDemoBanner } from '../components/ui/DemoBanner';
 import {
   MOCK_STUDENT_USER,
   MOCK_ADMIN_USER,
@@ -200,8 +201,8 @@ describe('Phase 8: Admin Security & Role-Based Audit Trail', () => {
   });
 });
 
-describe('Phase 9: Universal Accessibility & WCAG AAA Verification', () => {
-  it('validates high-contrast color luminance ratio exceeds WCAG AAA 7:1 standard', () => {
+describe('Phase 9: Universal Accessibility & High Contrast Verification', () => {
+  it('validates high-contrast color luminance ratio exceeds 7:1 standard', () => {
     // Relative luminance calculation for #070714 obsidian dark vs #ffffff pure white
     function getLuminance(r: number, g: number, b: number): number {
       const a = [r, g, b].map((v) => {
@@ -215,7 +216,7 @@ describe('Phase 9: Universal Accessibility & WCAG AAA Verification', () => {
     const textLum = getLuminance(255, 255, 255); // #ffffff white
     const contrastRatio = (textLum + 0.05) / (bgLum + 0.05);
 
-    // WCAG AAA requires at least 7.0:1 for normal text
+    // High contrast requires at least 7.0:1 for normal text
     assert.ok(contrastRatio >= 7.0, `Contrast ratio ${contrastRatio.toFixed(2)} must exceed 7.0:1`);
     assert.ok(contrastRatio > 18.0, 'Obsidian dark canvas provides ultra-high contrast for low vision students');
   });
@@ -243,5 +244,22 @@ describe('Phase 9: Universal Accessibility & WCAG AAA Verification', () => {
       const details = getBlockTypeDetails(t);
       assert.ok(details.description.length >= 15, `Description for ${t} must be descriptive`);
     });
+  });
+});
+
+describe('Production Environment UI Guards', () => {
+  it('hides developer status bar and demo toggle when NODE_ENV is production', () => {
+    assert.equal(shouldShowDemoBanner('production', undefined), false);
+    assert.equal(shouldShowDemoBanner('production', 'false'), false);
+    assert.equal(shouldShowDemoBanner('production', ''), false);
+  });
+
+  it('allows developer status bar in production only when NEXT_PUBLIC_DEBUG is explicitly true', () => {
+    assert.equal(shouldShowDemoBanner('production', 'true'), true);
+  });
+
+  it('shows developer status bar in development mode', () => {
+    assert.equal(shouldShowDemoBanner('development', undefined), true);
+    assert.equal(shouldShowDemoBanner('development', 'false'), true);
   });
 });

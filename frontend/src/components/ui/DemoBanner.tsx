@@ -3,13 +3,22 @@
 import React, { useSyncExternalStore } from 'react';
 import { isMockModeActive, setMockModeActive } from '@/lib/api';
 import { useAnnounce } from '@/components/accessibility/LiveAnnouncer';
-import { Database, RefreshCw } from 'lucide-react';
+import { Activity, Database, RefreshCw } from 'lucide-react';
 
 const subscribeStorage = (callback: () => void) => {
   if (typeof window === 'undefined') return () => {};
   window.addEventListener('storage', callback);
   return () => window.removeEventListener('storage', callback);
 };
+
+/**
+ * Pure function to determine whether the developer diagnostic bar should be visible.
+ * Must only be true when NODE_ENV is not 'production' or NEXT_PUBLIC_DEBUG is 'true'.
+ */
+export function shouldShowDemoBanner(nodeEnv?: string, publicDebug?: string): boolean {
+  if (publicDebug === 'true') return true;
+  return nodeEnv !== 'production';
+}
 
 export function DemoBanner() {
   const isMock = useSyncExternalStore(
@@ -28,6 +37,16 @@ export function DemoBanner() {
 
   if (!mounted) return null;
 
+  // Normal users must never see the developer bar in production unless debug flag is set
+  const showDevBar = shouldShowDemoBanner(
+    process.env.NODE_ENV,
+    process.env.NEXT_PUBLIC_DEBUG
+  );
+
+  if (!showDevBar) {
+    return null;
+  }
+
   const toggleMockMode = () => {
     const nextVal = !isMock;
     setMockModeActive(nextVal);
@@ -39,9 +58,30 @@ export function DemoBanner() {
     window.location.reload();
   };
 
-  // In live production mode, hide the debug banner completely so the UI is clean and professional
   if (!isMock) {
-    return null;
+    return (
+      <aside
+        aria-label="API connection mode"
+        className="bg-slate-950 border-b border-slate-800/80 px-4 py-1.5 text-xs text-slate-300 flex items-center justify-between"
+      >
+        <span className="flex items-center gap-2">
+          <Activity className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+          <span className="font-medium text-slate-300">
+            Backend Status: <span className="text-emerald-400 font-semibold">Connected</span>
+          </span>
+          <span className="text-slate-500">•</span>
+          <code className="font-mono bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded text-[11px] text-cyan-300">
+            {process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}
+          </code>
+        </span>
+        <button
+          onClick={toggleMockMode}
+          className="text-cyan-400 hover:text-cyan-300 font-semibold text-xs underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-cyan-400 rounded px-1.5 py-0.5 cursor-pointer"
+        >
+          Switch to Offline Demo Mode
+        </button>
+      </aside>
+    );
   }
 
   return (
@@ -54,7 +94,7 @@ export function DemoBanner() {
         <div className="flex items-center gap-2">
           <Database className="h-4 w-4 text-amber-400 shrink-0" aria-hidden="true" />
           <div>
-            <span className="font-bold text-amber-300">Sample Evaluation Dataset Active: </span>
+            <span className="font-bold text-amber-300">Sample content, not your document: </span>
             <span className="text-amber-200/90">
               Running in offline evaluation mode with sample STEM materials (OSI 7-Layer Model, Binary Trees, CPU Scheduling).
             </span>

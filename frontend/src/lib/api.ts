@@ -94,7 +94,7 @@ async function request<T>(
     const errorMsg =
       err instanceof Error ? err.message : 'Unknown network failure';
     throw new ApiError(
-      `Network error connecting to backend (${BASE_URL}): ${errorMsg}. If the backend is not running yet, you can enable Demo/Mock Mode.`,
+      `Network error connecting to backend: ${errorMsg}. Please verify your connection or retry.`,
       0
     );
   }

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, isMockModeActive } from '@/lib/api';
 import { getToken, subscribeAuth } from '@/lib/auth';
 import { Document, User } from '@/lib/types';
 import { formatDate, getStatusDetails } from '@/lib/utils';
@@ -60,6 +60,7 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatusTab, setSelectedStatusTab] = useState<'all' | 'completed' | 'processing' | 'uploaded'>('all');
   const [isDirectExplainerOpen, setIsDirectExplainerOpen] = useState(false);
+  const isMock = typeof window !== 'undefined' && isMockModeActive();
 
   const fetchDocuments = useCallback(async () => {
     if (!token) return;
@@ -107,6 +108,16 @@ export default function DashboardPage() {
   return (
     <div className="bg-mesh-pattern min-h-screen py-8 sm:py-10 text-slate-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+        {isMock && (
+          <div
+            role="status"
+            aria-label="Demo mode warning"
+            className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs sm:text-sm font-semibold flex items-center gap-2.5 shadow-xs"
+          >
+            <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" aria-hidden="true" />
+            <span>Sample content, not your document</span>
+          </div>
+        )}
         {/* Header Hero Section with 3D Voice Assistant Companion */}
         <section className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-sm relative overflow-hidden">
           <div className="flex flex-col lg:flex-row items-center justify-between gap-8 relative z-10">

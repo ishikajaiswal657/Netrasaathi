@@ -200,7 +200,7 @@ export default function AdminAuditLogsPage() {
           </div>
           <div className="space-y-1">
             <strong className="text-slate-900 font-bold block text-sm">
-              Zero-Content Privacy Architecture (FR16 &amp; PRD):
+              Privacy-Preserving Audit Architecture (FR16 &amp; PRD):
             </strong>
             <p className="text-slate-600 text-xs leading-relaxed">
               Audit logs record event timestamps, authenticated user IDs, action names, and opaque document references. Raw document text, extracted diagrams, and student voice question content are strictly omitted from audit databases to guarantee student privacy.
