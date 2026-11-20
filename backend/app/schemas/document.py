@@ -60,6 +60,18 @@ class PageBlocksResponse(BaseModel):
     blocks: list[ExplanationBlockItem]
 
 
+class DocumentStatusResponse(BaseModel):
+    """Real-time processing status of a document and its pages."""
+    id: int
+    status: str
+    page_count: int
+    pages_ready: int
+    error_message: str | None = None
+    pages: list[PageResponse] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ProcessDocumentResponse(BaseModel):
     """Result of triggering document OCR and AI diagram explanation."""
     id: int

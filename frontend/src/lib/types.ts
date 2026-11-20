@@ -24,7 +24,32 @@ export interface SignupResponse {
   access_token?: string;
 }
 
-export type DocumentStatus = 'uploaded' | 'processing' | 'completed' | 'failed';
+export type DocumentStatus =
+  | 'uploaded'
+  | 'reading'
+  | 'cleaning'
+  | 'explaining'
+  | 'ready'
+  | 'processing'
+  | 'completed'
+  | 'failed';
+
+export interface PageStatusItem {
+  id?: number | string;
+  page_number: number;
+  status: string;
+  error_message?: string;
+  image_path?: string;
+}
+
+export interface DocumentStatusResponse {
+  id: number | string;
+  status: DocumentStatus;
+  page_count: number;
+  pages_ready: number;
+  error_message?: string;
+  pages: PageStatusItem[];
+}
 
 export interface DocumentItem {
   id: number | string;

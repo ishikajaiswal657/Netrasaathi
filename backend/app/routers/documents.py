@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,7 @@ from backend.app.models.user import User
 from backend.app.schemas.document import (
     DocumentListItem,
     DocumentResponse,
+    DocumentStatusResponse,
     PageResponse,
     ExplanationBlockItem,
     PageBlocksResponse,
@@ -19,13 +20,15 @@ from backend.app.schemas.document import (
     AskQuestionResponse
 )
 from backend.app.security.dependencies import get_current_user
+from backend.app.services.pipeline import process_document_background
 from backend.app.services.reader import process_document_pages
 from backend.app.services.vision import VisionService
 from backend.app.services.qa import QAService
 from backend.app.services.storage import (
     sanitize_filename,
     save_original_file,
-    validate_file_content
+    validate_file_content,
+    validate_document_page_count,
 )
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -35,37 +38,42 @@ router = APIRouter(prefix="/documents", tags=["Documents"])
     "",
     response_model=DocumentResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Upload and process study material (PDF, JPG, PNG)"
+    summary="Upload study material and schedule reliable background processing"
 )
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Validates uploaded file size and magic bytes, extracts pages, and reads text/OCR.
-    Strictly associates the document with the authenticated student ID.
+    Validates uploaded file size, magic bytes, and page count limit.
+    Saves the file and immediately returns document record with status 'uploaded'.
+    Schedules heavy OCR, PII redaction, and Vision AI explanation in the background.
     """
     content = await file.read()
     raw_filename = file.filename or "uploaded_document"
 
     # 1. Security validation: extension, size, and binary magic bytes
-    validate_file_content(raw_filename, content)
+    extension = validate_file_content(raw_filename, content)
     clean_filename = sanitize_filename(raw_filename)
 
-    # 2. Register document record in database
+    # 2. Page count limit check (default MAX_PAGES = 30)
+    page_count = validate_document_page_count(extension, content)
+
+    # 3. Register document record in database with initial status 'uploaded'
     document = Document(
         user_id=current_user.id,
         filename=clean_filename,
         file_path="pending",
         status="uploaded",
-        page_count=0
+        page_count=page_count
     )
     db.add(document)
     db.commit()
     db.refresh(document)
 
-    # 3. Save original file in student's isolated folder
+    # 4. Save original file in student's isolated folder
     saved_path = save_original_file(
         user_id=current_user.id,
         document_id=document.id,
@@ -74,12 +82,6 @@ async def upload_document(
     )
     document.file_path = str(saved_path)
     db.commit()
-
-    # 4. Split document into pages, render images, extract text/OCR, and generate AI vision blocks
-    pages = process_document_pages(document, db)
-    for p in pages:
-        VisionService.process_page_blocks(p, db)
-    db.refresh(document)
 
     # 5. Security audit logging (FR16: action and IDs only, never raw text)
     audit = AuditLog(
@@ -90,7 +92,44 @@ async def upload_document(
     db.add(audit)
     db.commit()
 
+    # 6. Enqueue background processing so the client gets an immediate HTTP 201 response
+    background_tasks.add_task(process_document_background, document.id)
+
     return document
+
+
+@router.get(
+    "/{document_id}/status",
+    response_model=DocumentStatusResponse,
+    summary="Get real-time document and per-page processing status"
+)
+def get_document_status(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Enables frontend progress tracking (e.g. 'Page 2 of 5 ready').
+    Students can open and listen to early pages as soon as their status is 'ready'.
+    """
+    doc = db.query(Document).filter(
+        Document.id == document_id,
+        Document.user_id == current_user.id
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    pages = db.query(Page).filter(Page.document_id == document_id).order_by(Page.page_number).all()
+    pages_ready = len([p for p in pages if p.status == "ready"])
+
+    return DocumentStatusResponse(
+        id=doc.id,
+        status=doc.status,
+        page_count=doc.page_count,
+        pages_ready=pages_ready,
+        error_message=doc.error_message,
+        pages=pages
+    )
 
 
 @router.get(

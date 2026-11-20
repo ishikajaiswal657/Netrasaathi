@@ -42,6 +42,8 @@ try:
         # Upload & Storage constraints
         UPLOAD_DIR: str = "uploads"
         MAX_FILE_SIZE_MB: int = 10
+        MAX_PAGES: int = 30
+        MAX_IMAGE_DIM: int = 1200
         ALLOWED_EXTENSIONS: str = "pdf,jpg,jpeg,png"
 
         # OCR configuration
@@ -88,6 +90,8 @@ except ImportError:
 
         UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "uploads")
         MAX_FILE_SIZE_MB: int = int(os.getenv("MAX_FILE_SIZE_MB", "10"))
+        MAX_PAGES: int = int(os.getenv("MAX_PAGES", "30"))
+        MAX_IMAGE_DIM: int = int(os.getenv("MAX_IMAGE_DIM", "1200"))
         ALLOWED_EXTENSIONS: str = os.getenv("ALLOWED_EXTENSIONS", "pdf,jpg,jpeg,png")
 
         TESSERACT_CMD: str = os.getenv("TESSERACT_CMD", "tesseract")

@@ -11,6 +11,7 @@ import {
   SignupResponse,
   User,
   DocumentItem,
+  DocumentStatusResponse,
   PageBlocksResponse,
   AskQuestionResponse,
   AuditLogItem,
@@ -402,6 +403,36 @@ export const api = {
       {
         method: 'POST',
         body: formData,
+      },
+      token
+    );
+  },
+
+  /**
+   * Get Real-time Document and Page Processing Status
+   * Route: GET /documents/{id}/status
+   */
+  async getDocumentStatus(
+    documentId: string | number,
+    token?: string | null
+  ): Promise<DocumentStatusResponse> {
+    if (isMockModeActive()) {
+      return {
+        id: documentId,
+        status: 'ready',
+        page_count: 3,
+        pages_ready: 3,
+        pages: [
+          { page_number: 1, status: 'ready' },
+          { page_number: 2, status: 'ready' },
+          { page_number: 3, status: 'ready' },
+        ],
+      };
+    }
+    return request<DocumentStatusResponse>(
+      `/documents/${documentId}/status`,
+      {
+        method: 'GET',
       },
       token
     );

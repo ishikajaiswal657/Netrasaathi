@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useSyncExternalStore } from 'react';
+import React, { useState, useEffect, useRef, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -36,11 +36,25 @@ export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStatusText, setProcessingStatusText] = useState('');
+  const [pagesReady, setPagesReady] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [processingDocId, setProcessingDocId] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
   const [successDocId, setSuccessDocId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, []);
 
   const validateAndSetFile = (candidate: File | null) => {
     setErrorMessage('');
@@ -102,6 +116,69 @@ export default function UploadPage() {
     announcePolite('File selection cleared.');
   };
 
+  const startStatusPolling = (docId: string | number, userToken: string) => {
+    setIsProcessing(true);
+    setProcessingDocId(String(docId));
+    setProcessingStatusText('Validating and reading document pages...');
+    announcePolite('Upload received. Preparing document pages in the background...');
+
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+    }
+
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const statusData = await api.getDocumentStatus(docId, userToken);
+        setPagesReady(statusData.pages_ready);
+        setTotalPages(statusData.page_count);
+
+        let statusMsg = '';
+        switch (statusData.status) {
+          case 'uploaded':
+            statusMsg = 'Document received by server. Preparing to extract pages...';
+            break;
+          case 'reading':
+            statusMsg = `Reading ${statusData.page_count > 0 ? statusData.page_count + ' ' : ''}pages from document...`;
+            break;
+          case 'cleaning':
+            statusMsg = 'Sanitizing sensitive personal information on page images...';
+            break;
+          case 'explaining':
+            if (statusData.pages_ready > 0) {
+              statusMsg = `Page ${statusData.pages_ready} of ${statusData.page_count} ready. Explaining visual diagrams...`;
+            } else {
+              statusMsg = 'Structuring plain-English visual explanations with AI vision...';
+            }
+            break;
+          case 'ready':
+          case 'completed':
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            setIsProcessing(false);
+            setSuccessDocId(String(docId));
+            announcePolite('Document processing completed. Opening reading screen...');
+            setTimeout(() => {
+              router.push(`/reader/${docId}`);
+            }, 1000);
+            return;
+          case 'failed':
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            setIsProcessing(false);
+            const failReason = statusData.error_message || 'Document processing encountered an error.';
+            setErrorMessage(failReason);
+            announceAssertive(failReason);
+            return;
+          default:
+            statusMsg = `Processing status: ${statusData.status}...`;
+        }
+
+        setProcessingStatusText(statusMsg);
+        announcePolite(statusMsg);
+      } catch (pollErr: unknown) {
+        console.warn('Status poll retry:', pollErr);
+      }
+    }, 2000);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) {
@@ -119,28 +196,15 @@ export default function UploadPage() {
 
     setIsUploading(true);
     setErrorMessage('');
-    setUploadProgress(20);
-    announcePolite('Starting secure file upload and sanitization...');
+    setUploadProgress(100);
+    announcePolite('Uploading document to server...');
 
     try {
-      const progressTimer = setInterval(() => {
-        setUploadProgress((prev) => (prev < 80 ? prev + 15 : prev));
-      }, 300);
-
       const res = await api.uploadDocument(file, token);
-
-      clearInterval(progressTimer);
-      setUploadProgress(100);
-      setSuccessDocId(String(res.id));
-
-      announcePolite(
-        `Upload complete for ${res.filename}. Document status is ${res.status}. Loading document reader...`
-      );
-
-      setTimeout(() => {
-        router.push(`/reader/${res.id}`);
-      }, 1200);
+      setIsUploading(false);
+      startStatusPolling(res.id, token);
     } catch (err: unknown) {
+      setIsUploading(false);
       if (err instanceof Error && err.message.includes('401')) {
         announceAssertive('Your authentication token has expired. Please log in.');
         router.push('/login');
@@ -149,8 +213,6 @@ export default function UploadPage() {
       const msg = err instanceof Error ? err.message : 'Upload failed. Please try again.';
       setErrorMessage(msg);
       announceAssertive(msg);
-    } finally {
-      setIsUploading(false);
     }
   };
 
@@ -344,19 +406,66 @@ export default function UploadPage() {
             </div>
           )}
 
-          {/* Upload Progress Bar */}
+          {/* Upload and Processing Progress Card */}
           {isUploading && (
-            <div className="space-y-2" aria-live="polite">
-              <div className="flex justify-between text-xs font-bold text-slate-700">
-                <span>Sanitizing &amp; uploading document...</span>
-                <span>{uploadProgress}%</span>
+            <div className="space-y-2 p-4 rounded-2xl bg-blue-50 border border-blue-200" aria-live="polite" role="status">
+              <div className="flex justify-between text-xs font-bold text-blue-900">
+                <span>Uploading document to server...</span>
+                <span>100%</span>
               </div>
-              <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+              <div className="h-2 bg-blue-200 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-blue-600 transition-all duration-300 rounded-full"
-                  style={{ width: `${uploadProgress}%` }}
+                  style={{ width: `100%` }}
                 />
               </div>
+            </div>
+          )}
+
+          {isProcessing && (
+            <div className="space-y-4 p-5 rounded-2xl bg-blue-50 border-2 border-blue-300 shadow-xs" aria-live="polite" role="status">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <strong className="text-sm font-bold text-slate-900 block truncate">
+                    {processingStatusText}
+                  </strong>
+                  {totalPages > 0 && (
+                    <span className="text-xs font-semibold text-blue-700">
+                      {pagesReady > 0 ? `Page ${pagesReady} of ${totalPages} ready` : `Total pages: ${totalPages}`}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="h-2.5 bg-blue-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-600 transition-all duration-500 rounded-full"
+                  style={{
+                    width: totalPages > 0 ? `${Math.max(15, (pagesReady / totalPages) * 100)}%` : '25%',
+                  }}
+                />
+              </div>
+
+              {/* Early Access Button: Listen to Page 1 immediately once it is ready */}
+              {pagesReady >= 1 && processingDocId && (
+                <div className="pt-2 border-t border-blue-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <span className="text-xs text-blue-800 font-medium">
+                    Page 1 is ready! You do not have to wait for later pages.
+                  </span>
+                  <Link href={`/reader/${processingDocId}`}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="primary"
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold whitespace-nowrap shadow-xs"
+                    >
+                      Start Reading Page 1 Now
+                    </Button>
+                  </Link>
+                </div>
+              )}
             </div>
           )}
 

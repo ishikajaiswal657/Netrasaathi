@@ -62,6 +62,35 @@ def validate_file_content(filename: str, content: bytes) -> str:
     return extension
 
 
+def validate_document_page_count(extension: str, content: bytes) -> int:
+    """
+    Inspects document to determine page count and enforces MAX_PAGES limit.
+    Returns the page count if valid, or raises HTTPException if limit exceeded.
+    """
+    if extension != "pdf":
+        return 1
+
+    try:
+        import pymupdf
+        doc = pymupdf.open(stream=content, filetype="pdf")
+        count = len(doc)
+        doc.close()
+
+        if count > settings.MAX_PAGES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Document exceeds maximum allowed limit of {settings.MAX_PAGES} pages (found {count} pages). Please upload a smaller document."
+            )
+        return count
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Could not read PDF document pages: {str(exc)}"
+        )
+
+
 def get_document_dir(user_id: int, document_id: int) -> Path:
     """Returns the dedicated directory path for a student document."""
     doc_dir = Path(settings.UPLOAD_DIR) / str(user_id) / str(document_id)

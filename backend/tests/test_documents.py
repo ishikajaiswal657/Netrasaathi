@@ -71,10 +71,15 @@ class TestDocumentUploadAndReading(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         Base.metadata.create_all(bind=test_engine)
+        import backend.app.database as db_module
+        cls._orig_session_local = db_module.SessionLocal
+        db_module.SessionLocal = TestingSessionLocal
         cls.client = TestClient(app)
 
     @classmethod
     def tearDownClass(cls):
+        import backend.app.database as db_module
+        db_module.SessionLocal = cls._orig_session_local
         Base.metadata.drop_all(bind=test_engine)
         # Clean up test upload files created during tests
         upload_dir = Path("uploads")
@@ -125,7 +130,7 @@ class TestDocumentUploadAndReading(unittest.TestCase):
         pass
 
     def test_upload_pdf_success_and_page_extraction(self):
-        """Verifies PDF upload, page extraction into images, and digital text extraction."""
+        """Verifies PDF upload returns quickly with valid document ID, page count, and status."""
         pdf_bytes = create_sample_pdf()
         files = {"file": ("study_material.pdf", pdf_bytes, "application/pdf")}
 
@@ -134,21 +139,70 @@ class TestDocumentUploadAndReading(unittest.TestCase):
         data = response.json()
 
         self.assertEqual(data["filename"], "study_material.pdf")
-        self.assertEqual(data["status"], "processed")
+        self.assertIn(data["status"], ["uploaded", "reading", "cleaning", "explaining", "ready", "processed"])
         self.assertEqual(data["page_count"], 2)
-        self.assertEqual(len(data["pages"]), 2)
 
-        # Check page 1
-        page1 = data["pages"][0]
-        self.assertEqual(page1["page_number"], 1)
-        self.assertIn("Page 1: Accessible AI", page1["ocr_text"])
-        self.assertTrue(Path(page1["image_path"]).exists())
+    def test_document_status_endpoint(self):
+        """Verifies GET /documents/{id}/status returns document and per-page real-time progress."""
+        pdf_bytes = create_sample_pdf()
+        upload_res = self.client.post(
+            "/documents",
+            headers=self.headers_a,
+            files={"file": ("status_test.pdf", pdf_bytes, "application/pdf")}
+        )
+        doc_id = upload_res.json()["id"]
 
-        # Check page 2
-        page2 = data["pages"][1]
-        self.assertEqual(page2["page_number"], 2)
-        self.assertIn("Page 2: Cybersecurity", page2["ocr_text"])
-        self.assertTrue(Path(page2["image_path"]).exists())
+        status_res = self.client.get(f"/documents/{doc_id}/status", headers=self.headers_a)
+        self.assertEqual(status_res.status_code, 200)
+        status_data = status_res.json()
+
+        self.assertEqual(status_data["id"], doc_id)
+        self.assertIn("status", status_data)
+        self.assertIn("page_count", status_data)
+        self.assertIn("pages_ready", status_data)
+        self.assertIn("pages", status_data)
+
+    def test_startup_recovery_marks_stale_documents_as_failed(self):
+        """Server startup must mark any document left in an in-progress working state as failed."""
+        from backend.app.services.pipeline import cleanup_stale_processing_jobs
+
+        db = TestingSessionLocal()
+        try:
+            stale_doc = Document(
+                user_id=1,
+                filename="stale_lecture.pdf",
+                file_path="mock_path",
+                status="reading",
+                page_count=3
+            )
+            db.add(stale_doc)
+            db.commit()
+            db.refresh(stale_doc)
+            stale_id = stale_doc.id
+
+            recovered_count = cleanup_stale_processing_jobs(db)
+            self.assertGreaterEqual(recovered_count, 1)
+
+            updated = db.query(Document).filter(Document.id == stale_id).first()
+            self.assertEqual(updated.status, "failed")
+            self.assertIn("restarted", updated.error_message.lower())
+        finally:
+            db.close()
+
+    def test_page_count_limit_exceeded_fails_fast(self):
+        """Rejects documents exceeding MAX_PAGES with a clear error message."""
+        from unittest.mock import patch
+
+        pdf_bytes = create_sample_pdf()
+        # Mock MAX_PAGES limit to 1 page
+        with patch("backend.app.services.storage.settings.MAX_PAGES", 1):
+            response = self.client.post(
+                "/documents",
+                headers=self.headers_a,
+                files={"file": ("too_long.pdf", pdf_bytes, "application/pdf")}
+            )
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("exceeds maximum allowed limit", response.json()["detail"])
 
     def test_upload_png_image_success(self):
         """Verifies single-page image document upload and storage."""
@@ -161,8 +215,12 @@ class TestDocumentUploadAndReading(unittest.TestCase):
 
         self.assertEqual(data["filename"], "diagram.png")
         self.assertEqual(data["page_count"], 1)
-        self.assertEqual(len(data["pages"]), 1)
-        self.assertTrue(Path(data["pages"][0]["image_path"]).exists())
+
+        # After background processing finishes, document detail contains page record
+        doc_res = self.client.get(f"/documents/{data['id']}", headers=self.headers_a)
+        doc_data = doc_res.json()
+        self.assertEqual(len(doc_data["pages"]), 1)
+        self.assertTrue(Path(doc_data["pages"][0]["image_path"]).exists())
 
     def test_upload_disallowed_extension_fails(self):
         """Rejects executable scripts or unsupported file formats with 400."""

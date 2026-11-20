@@ -100,21 +100,35 @@ export function getStatusDetails(status: DocumentStatus): {
   ariaLabel: string;
 } {
   switch (status) {
+    case 'ready':
     case 'completed':
       return {
         label: 'Ready to Read',
         badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold',
         ariaLabel: 'Document status: Ready to read',
       };
+    case 'reading':
+      return {
+        label: 'Reading Pages',
+        badgeClass: 'bg-blue-50 text-blue-700 border-blue-200 font-bold animate-pulse',
+        ariaLabel: 'Document status: Reading pages',
+      };
+    case 'cleaning':
+      return {
+        label: 'Sanitizing Data',
+        badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200 font-bold animate-pulse',
+        ariaLabel: 'Document status: Sanitizing sensitive personal data',
+      };
+    case 'explaining':
     case 'processing':
       return {
-        label: 'Processing OCR & AI',
+        label: 'Explaining Visuals',
         badgeClass: 'bg-blue-50 text-blue-700 border-blue-200 font-bold animate-pulse',
-        ariaLabel: 'Document status: Processing OCR and AI explanations',
+        ariaLabel: 'Document status: Explaining visual diagrams with AI vision',
       };
     case 'uploaded':
       return {
-        label: 'Uploaded (Needs Processing)',
+        label: 'Uploaded',
         badgeClass: 'bg-amber-50 text-amber-800 border-amber-200 font-bold',
         ariaLabel: 'Document status: Uploaded and awaiting processing',
       };
@@ -123,6 +137,12 @@ export function getStatusDetails(status: DocumentStatus): {
         label: 'Processing Failed',
         badgeClass: 'bg-rose-50 text-rose-700 border-rose-200 font-bold',
         ariaLabel: 'Document status: Processing failed',
+      };
+    default:
+      return {
+        label: 'Processing',
+        badgeClass: 'bg-slate-100 text-slate-700 border-slate-200 font-bold',
+        ariaLabel: 'Document status: Processing',
       };
   }
 }
