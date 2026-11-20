@@ -218,10 +218,10 @@ def get_page_image(
         Page.page_number == page_number,
         Document.user_id == current_user.id
     ).first()
-    if not page or not Path(page.image_path).exists():
+    if not page or not page.image_path or not Path(page.image_path).exists():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Page image not found"
+            detail="Document image expired, reading from saved text"
         )
     return FileResponse(page.image_path, media_type="image/png")
 

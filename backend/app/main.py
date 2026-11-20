@@ -28,7 +28,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.config import get_settings
-from backend.app.database import SessionLocal, get_db, init_db
+from backend.app.database import SessionLocal, apply_migrations, get_db, init_db
 from backend.app.routers.auth import router as auth_router
 from backend.app.routers.documents import router as documents_router
 from backend.app.routers.admin import router as admin_router
@@ -44,15 +44,20 @@ async def lifespan(app: FastAPI):
     Server startup and shutdown lifecycle management.
     Validates OpenAI API configuration and recovers any documents interrupted by prior restarts.
     """
-    # 1. Recover stale processing documents so nothing is stuck forever
-    try:
-        db = SessionLocal()
-        cleanup_stale_processing_jobs(db)
-        db.close()
-    except Exception as exc:
-        logger.warning(f"Could not run startup job cleanup: {exc}")
+    # 1. Apply database migrations if not under unit tests
+    if not os.environ.get("TESTING"):
+        apply_migrations()
 
-    # 2. Check OpenAI API credentials without logging keys
+    # 2. Recover stale processing documents so nothing is stuck forever
+    if not os.environ.get("TESTING"):
+        try:
+            db = SessionLocal()
+            cleanup_stale_processing_jobs(db)
+            db.close()
+        except Exception as exc:
+            logger.warning(f"Could not run startup job cleanup: {exc}")
+
+    # 3. Check OpenAI API credentials without logging keys
     settings = get_settings()
     api_key = settings.OPENAI_API_KEY
     if not api_key or api_key in ["mock", "test", ""] or api_key.startswith("your_openai"):

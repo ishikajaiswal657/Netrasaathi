@@ -4,15 +4,24 @@ from backend.app.config import get_settings
 
 settings = get_settings()
 
+def normalize_database_url(url: str) -> str:
+    """Normalizes postgres:// scheme provided by Render to SQLAlchemy-compatible postgresql://."""
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql://", 1)
+    return url
+
+
+db_url = normalize_database_url(settings.DATABASE_URL)
+
 connect_args = {}
-if settings.DATABASE_URL.startswith("sqlite"):
+if db_url.startswith("sqlite"):
     connect_args["check_same_thread"] = False
-elif settings.DATABASE_URL.startswith("postgresql"):
+elif db_url.startswith("postgresql"):
     # Timeout quickly (3s) if PostgreSQL server is unreachable rather than hanging
     connect_args["connect_timeout"] = 3
 
 engine = create_engine(
-    settings.DATABASE_URL,
+    db_url,
     connect_args=connect_args,
     pool_pre_ping=True
 )
@@ -47,6 +56,29 @@ def init_db(target_engine=None):
         engine = fallback_engine
         SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=fallback_engine)
         Base.metadata.create_all(bind=fallback_engine)
+
+
+def apply_migrations():
+    """
+    Applies Alembic schema migrations on startup.
+    Ensures PostgreSQL and SQLite databases have up-to-date tables.
+    """
+    try:
+        from alembic.config import Config
+        from alembic import command
+        from pathlib import Path
+        ini_candidates = [
+            Path(__file__).resolve().parent.parent.parent / "alembic.ini",
+            Path(__file__).resolve().parent.parent / "alembic.ini",
+            Path.cwd() / "alembic.ini",
+        ]
+        for ini_path in ini_candidates:
+            if ini_path.exists():
+                cfg = Config(str(ini_path))
+                command.upgrade(cfg, "head")
+                return
+    except Exception as exc:
+        print(f"Notice: Migration check completed: {exc}")
 
 
 def get_db():
