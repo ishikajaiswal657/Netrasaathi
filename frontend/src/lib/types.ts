@@ -45,6 +45,7 @@ export type BlockType = 'text' | 'diagram' | 'flowchart' | 'graph' | 'table' | '
 export interface ExplanationBlock {
   id: number | string;
   page_id?: number | string;
+  page_number?: number;
   order_index: number;
   block_type: BlockType;
   explanation_text: string;
@@ -57,6 +58,8 @@ export interface PageBlocksResponse {
   document_id: number | string;
   page_number: number;
   total_pages: number;
+  page_status?: 'ready' | 'processing' | 'failed';
+  error_message?: string;
   blocks: ExplanationBlock[];
 }
 

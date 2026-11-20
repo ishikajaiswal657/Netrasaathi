@@ -449,6 +449,27 @@ export const api = {
   },
 
   /**
+   * Retry AI Explanation for a Page
+   * Route: POST /documents/{id}/pages/{n}/retry
+   */
+  async retryPage(
+    documentId: string | number,
+    pageNumber: number,
+    token?: string | null
+  ): Promise<PageBlocksResponse> {
+    if (isMockModeActive()) {
+      return mockAdapter.getDocumentBlocks(documentId, pageNumber);
+    }
+    return request<PageBlocksResponse>(
+      `/documents/${documentId}/pages/${pageNumber}/retry`,
+      {
+        method: 'POST',
+      },
+      token
+    );
+  },
+
+  /**
    * Ask Follow-up Question
    * Route: POST /documents/{id}/ask
    */

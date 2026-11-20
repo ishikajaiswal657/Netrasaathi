@@ -110,38 +110,31 @@ class TestVisionService(unittest.TestCase):
             original_bytes = f.read()
         self.assertEqual(decoded_bytes, original_bytes)
 
-    def test_deterministic_fallback_generator(self):
+    def test_grounded_fallback_returns_raw_text_only(self):
         """
-        Fallback generator must classify different content elements
-        (diagrams, flowcharts, formulas, text) into appropriate block types.
+        Fallback generator must NEVER invent synthetic diagrams or explanations.
+        It must strictly return raw OCR text labeled 'Raw text, no AI explanation'.
         """
-        sample_text = (
-            "System Architecture Diagram with microservices and API gateway.\n\n"
-            "Flowchart Step 1: User submits request. Decision: If authorized, continue; else reject.\n\n"
-            "E = m * c^2\n\n"
-            "Standard introductory textbook text explaining background principles."
-        )
+        sample_text = "Quantum Key Distribution using BB84 protocol with polarized photons."
 
         analysis = VisionService.generate_fallback_blocks(ocr_text=sample_text, page_number=1)
 
         self.assertIsInstance(analysis, PageAnalysisSchema)
-        self.assertEqual(len(analysis.blocks), 4)
+        self.assertEqual(len(analysis.blocks), 1)
+        self.assertEqual(analysis.blocks[0].block_type, "text")
+        self.assertEqual(analysis.blocks[0].title, "Raw text, no AI explanation")
+        self.assertEqual(analysis.blocks[0].explanation_text, sample_text)
 
-        # Check types
-        block_types = [b.block_type for b in analysis.blocks]
-        self.assertIn("diagram", block_types)
-        self.assertIn("flowchart", block_types)
-        self.assertIn("formula", block_types)
-        self.assertIn("text", block_types)
-
-        # Check ordering
-        self.assertEqual([b.order_index for b in analysis.blocks], [1, 2, 3, 4])
+    def test_grounded_fallback_empty_when_no_ocr_text(self):
+        """When no OCR text is available, fallback must return 0 blocks instead of inventing content."""
+        analysis = VisionService.generate_fallback_blocks(ocr_text="", page_number=1)
+        self.assertEqual(len(analysis.blocks), 0)
 
     @patch("backend.app.services.vision.settings")
     def test_mocked_openai_vision_call(self, mock_settings):
         """Simulate real OpenAI Vision structured API completion and ensure parser handles it."""
         mock_settings.OPENAI_API_KEY = "sk-test-live-key"
-        mock_settings.OPENAI_VISION_MODEL = "gpt-4o"
+        mock_settings.OPENAI_VISION_MODEL = "gpt-4o-mini"
 
         mock_parsed_response = PageAnalysisSchema(
             page_summary="Page containing a binary search tree diagram and pseudocode.",
@@ -171,15 +164,85 @@ class TestVisionService(unittest.TestCase):
             mock_openai_cls.return_value = mock_client
             mock_client.beta.chat.completions.parse.return_value = mock_completion
 
-            result = VisionService.explain_page_image(
+            result, is_success, reason = VisionService.explain_page_image(
                 image_path=self.image_path,
                 ocr_text="BST diagram",
                 page_number=1,
             )
 
+            self.assertTrue(is_success)
+            self.assertIsNone(reason)
             self.assertEqual(len(result.blocks), 2)
             self.assertEqual(result.blocks[0].title, "Binary Search Tree Diagram")
             self.assertEqual(result.blocks[1].block_type, "formula")
+
+    def test_failed_openai_call_without_ocr_produces_failed_page_and_no_blocks(self):
+        """A failed OpenAI call with no OCR text must set page to failed and generate NO synthetic blocks."""
+        blank_page = Page(
+            document_id=self.document.id,
+            page_number=2,
+            image_path=str(self.image_path),
+            ocr_text="",
+            pii_items_found=0,
+        )
+        self.db.add(blank_page)
+        self.db.commit()
+        self.db.refresh(blank_page)
+
+        # Force failure via invalid key
+        with patch("backend.app.services.vision.settings") as mock_settings:
+            mock_settings.OPENAI_API_KEY = ""
+            created_blocks = VisionService.process_page_blocks(blank_page, self.db)
+
+        self.assertEqual(blank_page.status, "failed")
+        self.assertIsNotNone(blank_page.error_message)
+        self.assertEqual(len(created_blocks), 0)
+
+    def test_failed_openai_call_with_ocr_produces_raw_text_only(self):
+        """A failed OpenAI call with OCR text must set page to failed and produce raw text labeled block."""
+        with patch("backend.app.services.vision.settings") as mock_settings:
+            mock_settings.OPENAI_API_KEY = ""
+            created_blocks = VisionService.process_page_blocks(self.page, self.db)
+
+        self.assertEqual(self.page.status, "failed")
+        self.assertIsNotNone(self.page.error_message)
+        self.assertEqual(len(created_blocks), 1)
+        self.assertEqual(created_blocks[0].title, "Raw text, no AI explanation")
+        self.assertEqual(created_blocks[0].explanation_text, self.page.ocr_text)
+
+    def test_unique_document_content_strictly_isolated(self):
+        """Unique words from a student's document must strictly belong to that document and page."""
+        unique_text = "UniqueStudentProofBB84ProtocolVerification"
+        mock_parsed = PageAnalysisSchema(
+            page_summary="Proof of protocol",
+            blocks=[
+                VisualBlockSchema(
+                    order_index=1,
+                    block_type="text",
+                    title="Student Proof",
+                    explanation_text=f"The proof states: {unique_text}",
+                )
+            ],
+        )
+
+        with patch("backend.app.services.vision.settings") as mock_settings:
+            mock_settings.OPENAI_API_KEY = "sk-valid-key"
+            mock_settings.OPENAI_VISION_MODEL = "gpt-4o-mini"
+            with patch("openai.OpenAI") as mock_openai_cls:
+                mock_choice = MagicMock()
+                mock_choice.message.parsed = mock_parsed
+                mock_completion = MagicMock()
+                mock_completion.choices = [mock_choice]
+                mock_client = MagicMock()
+                mock_openai_cls.return_value = mock_client
+                mock_client.beta.chat.completions.parse.return_value = mock_completion
+
+                blocks = VisionService.process_page_blocks(self.page, self.db)
+
+        self.assertEqual(self.page.status, "ready")
+        self.assertEqual(len(blocks), 1)
+        self.assertIn(unique_text, blocks[0].explanation_text)
+        self.assertEqual(blocks[0].page_id, self.page.id)
 
     def test_process_page_blocks_persists_to_database(self):
         """process_page_blocks must persist structured Block records to the DB."""

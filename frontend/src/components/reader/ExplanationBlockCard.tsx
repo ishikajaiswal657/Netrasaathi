@@ -66,7 +66,7 @@ export function ExplanationBlockCard({
   return (
     <article
       id={`block-${block.id}`}
-      aria-label={`Block ${block.order_index}: ${typeDetails.label} - ${block.title || ''}`}
+      aria-label={`${block.page_number ? `Page ${block.page_number}, ` : ''}Block ${block.order_index}: ${typeDetails.label} - ${block.title || ''}`}
       className={`rounded-2xl p-5 sm:p-7 transition-all border border-l-4 relative bg-white ${getBorderColor()} ${
         isActive
           ? 'border-blue-300 ring-2 ring-blue-600 shadow-md bg-blue-50/20'
@@ -102,7 +102,7 @@ export function ExplanationBlockCard({
                 {typeDetails.label}
               </span>
               <span className="text-xs text-slate-500 font-semibold">
-                Block {block.order_index}
+                {block.page_number ? `Page ${block.page_number} · Block ${block.order_index}` : `Block ${block.order_index}`}
               </span>
             </div>
             {block.title && (

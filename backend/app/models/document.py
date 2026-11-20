@@ -16,6 +16,7 @@ class Document(Base):
     filename = Column(String(255), nullable=False)
     file_path = Column(String(500), nullable=False)
     status = Column(String(50), default="uploaded", nullable=False)  # uploaded, processing, completed, failed
+    error_message = Column(Text, nullable=True)
     page_count = Column(Integer, default=0, nullable=False)
     created_at = Column(
         DateTime(timezone=True),
@@ -41,6 +42,8 @@ class Page(Base):
     image_path = Column(String(500), nullable=False)
     ocr_text = Column(Text, nullable=True)
     pii_items_found = Column(Integer, default=0, nullable=False)
+    status = Column(String(50), default="ready", nullable=False)  # ready, processing, failed
+    error_message = Column(Text, nullable=True)
 
     # Relationships
     document = relationship("Document", back_populates="pages")

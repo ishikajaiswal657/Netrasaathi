@@ -10,6 +10,8 @@ class PageResponse(BaseModel):
     image_path: str
     ocr_text: str | None
     pii_items_found: int
+    status: str = "ready"
+    error_message: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -21,6 +23,7 @@ class DocumentListItem(BaseModel):
     status: str
     page_count: int
     created_at: datetime
+    error_message: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -42,6 +45,7 @@ class ExplanationBlockItem(BaseModel):
     block_type: str
     explanation_text: str
     title: str | None = None
+    page_number: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -51,6 +55,8 @@ class PageBlocksResponse(BaseModel):
     document_id: int
     page_number: int
     total_pages: int
+    page_status: str = "ready"
+    error_message: str | None = None
     blocks: list[ExplanationBlockItem]
 
 

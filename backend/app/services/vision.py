@@ -61,72 +61,29 @@ class VisionService:
     @classmethod
     def generate_fallback_blocks(cls, ocr_text: str, page_number: int = 1) -> PageAnalysisSchema:
         """
-        Intelligent deterministic fallback generator.
-        Used when OPENAI_API_KEY is not configured or during offline testing/dev mode.
-        Extracts semantic blocks from OCR text, classifying equations, diagrams, and paragraphs.
+        Grounded fallback generator when OpenAI Vision is unavailable.
+        Strict rule: Never invent synthetic diagrams, flowcharts, or explanations.
+        Serves only exact OCR text labeled 'Raw text, no AI explanation'.
+        If no text is detected, returns an empty block list.
         """
         raw_text = (ocr_text or "").strip()
         if not raw_text:
             return PageAnalysisSchema(
-                page_summary=f"Page {page_number} visual study worksheet.",
-                blocks=[
-                    VisualBlockSchema(
-                        order_index=1,
-                        block_type="text",
-                        title=f"Page {page_number} Overview",
-                        explanation_text=(
-                            f"This is page {page_number} of your study material. "
-                            "No distinct text was detected on this page image."
-                        ),
-                    )
-                ],
+                page_summary=f"Page {page_number}: No visual or textual content could be verified.",
+                blocks=[],
             )
 
-        paragraphs = [p.strip() for p in raw_text.split("\n\n") if p.strip()]
-        if not paragraphs:
-            paragraphs = [raw_text]
-
-        blocks: list[VisualBlockSchema] = []
-        for idx, para in enumerate(paragraphs, start=1):
-            lower_para = para.lower()
-
-            # Content element classification heuristics
-            if any(term in lower_para for term in ["flowchart", "step 1", "decision", "start ->", "process:"]):
-                b_type: Literal["text", "diagram", "flowchart", "graph", "table", "formula"] = "flowchart"
-                title = f"Flowchart: Step-by-Step Path {idx}"
-                desc = f"Flowchart process path: {para}"
-            elif any(term in lower_para for term in ["diagram", "architecture", "figure", "illustration", "circuit", "node"]):
-                b_type = "diagram"
-                title = f"Visual Diagram {idx}"
-                desc = f"Visual layout and component structure: {para}"
-            elif any(term in lower_para for term in ["graph", "plot", "x-axis", "y-axis", "chart", "trend"]):
-                b_type = "graph"
-                title = f"Data Chart / Graph {idx}"
-                desc = f"Data visualization and metric trends: {para}"
-            elif any(term in lower_para for term in ["table", "column", "row", "|", "tabular"]):
-                b_type = "table"
-                title = f"Structured Data Table {idx}"
-                desc = f"Data table contents: {para}"
-            elif any(term in lower_para for term in ["=", "∫", "∑", "formula", "equation", "sqrt", "^", "+", "-"] ) and len(para.split()) < 20:
-                b_type = "formula"
-                title = f"Mathematical Formula {idx}"
-                desc = f"Spoken equation: {para.replace('=', ' equals ').replace('+', ' plus ').replace('-', ' minus ')}"
-            else:
-                b_type = "text"
-                title = f"Reading Passage {idx}"
-                desc = para
-
-            blocks.append(
+        return PageAnalysisSchema(
+            page_summary=f"Page {page_number} raw extracted text without AI visual explanation.",
+            blocks=[
                 VisualBlockSchema(
-                    order_index=idx,
-                    block_type=b_type,
-                    title=title,
-                    explanation_text=desc,
+                    order_index=1,
+                    block_type="text",
+                    title="Raw text, no AI explanation",
+                    explanation_text=raw_text,
                 )
-            )
-
-        summary = f"Page {page_number} containing {len(blocks)} structured study elements."
-        return PageAnalysisSchema(page_summary=summary, blocks=blocks)
+            ],
+        )
 
     @classmethod
     def explain_page_image(
@@ -134,17 +91,18 @@ class VisionService:
         image_path: Path,
         ocr_text: str = "",
         page_number: int = 1,
-    ) -> PageAnalysisSchema:
+    ) -> tuple[PageAnalysisSchema, bool, str | None]:
         """
-        Sends the redacted page PNG to OpenAI Vision API with Pydantic structured output formatting.
-        Gracefully falls back to deterministic analysis if the API key is not configured or errors out.
+        Sends the redacted page PNG to OpenAI Vision API with strict grounding instructions.
+        Returns a tuple: (analysis_schema, is_success, error_reason).
         """
         api_key = settings.OPENAI_API_KEY
 
         # Check if OpenAI API key is missing or set to placeholder/mock value
         if not api_key or api_key in ["mock", "test", ""] or api_key.startswith("your_openai"):
-            logger.info("Using local deterministic vision analyzer (no OpenAI API key configured).")
-            return cls.generate_fallback_blocks(ocr_text=ocr_text, page_number=page_number)
+            reason = "OpenAI API key is not configured on the server."
+            logger.warning(f"Page {page_number}: {reason}")
+            return cls.generate_fallback_blocks(ocr_text=ocr_text, page_number=page_number), False, reason
 
         try:
             from openai import OpenAI
@@ -153,18 +111,19 @@ class VisionService:
             b64_image = cls.encode_image_to_base64(image_path)
 
             system_prompt = (
-                "You are Netrasaathi, an accessibility AI that translates visual study materials "
-                "(diagrams, flowcharts, graphs, tables, formulas) into clear, structured spoken English "
-                "for visually impaired computer science and engineering students.\n"
-                "Break down the provided page image into distinct explanation blocks ordered strictly "
-                "in top-to-bottom reading sequence.\n"
-                "Rules:\n"
-                "- For diagrams: describe main components, layout, and arrow directions.\n"
-                "- For flowcharts: describe starting state, conditional branches ('if yes, do X; if no, jump to Y'), and terminal states.\n"
-                "- For graphs: identify axes, units, peaks, troughs, and overall trend.\n"
-                "- For formulas: translate symbols into clear spoken words (e.g. 'a squared plus b squared equals c squared').\n"
-                "- For tables: read row-by-row with header associations.\n"
-                "- Provide clear, concise titles for each block."
+                "You are Netrasaathi, an educational accessibility assistant that converts study material images "
+                "into clear, accessible spoken descriptions for visually impaired students.\n"
+                "Strict Rules:\n"
+                "1. Grounding: Describe ONLY what is visible in this page image. Add NO outside knowledge or unstated assumptions.\n"
+                "2. Clarity: If any visual part, word, or symbol is blurry, partially cropped, or unclear, explicitly state that it is unclear.\n"
+                "3. Language: Use very simple English with short, direct sentences. Define any technical term in plain words.\n"
+                "4. Reading Order: Break down the page strictly in top-to-bottom, left-to-right natural reading sequence.\n"
+                "5. Diagrams and Flowcharts: Walk through the parts, nodes, labels, and arrow directions step-by-step.\n"
+                "6. Graphs: State the graph type, axes labels and units, general trend, and the highest and lowest values.\n"
+                "7. Tables: First state what the table is about, then read rows in a natural narrative way connecting column headers to values.\n"
+                "8. Formulas: Pronounce every symbol in spoken words, followed by one line explaining its meaning.\n"
+                "9. Output Format: Produce structured JSON matching the provided schema with block types strictly chosen from: "
+                "'text', 'diagram', 'flowchart', 'graph', 'table', 'formula'."
             )
 
             completion = client.beta.chat.completions.parse(
@@ -179,7 +138,7 @@ class VisionService:
                                 "text": (
                                     f"Here is page {page_number}. Extracted OCR text for reference:\n\n"
                                     f"{ocr_text}\n\n"
-                                    "Analyze every visual and textual element on this page image."
+                                    "Analyze only the elements visibly present on this page image."
                                 ),
                             },
                             {
@@ -193,37 +152,46 @@ class VisionService:
                     },
                 ],
                 response_format=PageAnalysisSchema,
+                temperature=0.1,
                 max_tokens=4000,
             )
 
             parsed_result = completion.choices[0].message.parsed
             if parsed_result and parsed_result.blocks:
-                return parsed_result
+                return parsed_result, True, None
 
-            # If response was empty, use fallback
-            return cls.generate_fallback_blocks(ocr_text=ocr_text, page_number=page_number)
+            reason = "OpenAI Vision returned an empty analysis for this page."
+            return cls.generate_fallback_blocks(ocr_text=ocr_text, page_number=page_number), False, reason
 
         except Exception as exc:
-            logger.warning(
-                f"OpenAI Vision API call failed ({exc}); falling back to local deterministic generator."
-            )
-            return cls.generate_fallback_blocks(ocr_text=ocr_text, page_number=page_number)
+            reason = f"OpenAI Vision API call failed: {str(exc)}"
+            logger.warning(f"Page {page_number}: {reason}")
+            return cls.generate_fallback_blocks(ocr_text=ocr_text, page_number=page_number), False, reason
 
     @classmethod
     def process_page_blocks(cls, page: Page, db: Session) -> list[Block]:
         """
         Analyzes a single page and stores the structured explanation blocks in the database.
+        If Vision API succeeds, marks page status as 'ready'.
+        If Vision API fails, marks page status as 'failed' with error_message and saves only raw text if available.
         Clears any pre-existing blocks for the page to prevent duplicate entries on re-processing.
         """
         # Delete any existing blocks for this page
         db.query(Block).filter(Block.page_id == page.id).delete()
         db.commit()
 
-        analysis = cls.explain_page_image(
+        analysis, is_success, reason = cls.explain_page_image(
             image_path=Path(page.image_path),
             ocr_text=page.ocr_text or "",
             page_number=page.page_number,
         )
+
+        if is_success:
+            page.status = "ready"
+            page.error_message = None
+        else:
+            page.status = "failed"
+            page.error_message = reason
 
         created_blocks: list[Block] = []
         for item in analysis.blocks:
@@ -238,6 +206,7 @@ class VisionService:
             created_blocks.append(block_record)
 
         db.commit()
+        db.refresh(page)
         for b in created_blocks:
             db.refresh(b)
 

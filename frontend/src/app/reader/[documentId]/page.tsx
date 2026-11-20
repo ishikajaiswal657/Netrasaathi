@@ -196,6 +196,27 @@ function ReaderView() {
     [documentId, announceAssertive, announcePolite, router]
   );
 
+  const handleRetryPage = useCallback(async () => {
+    setIsLoading(true);
+    setErrorMessage('');
+    stopSpeech();
+    setIsPlaying(false);
+    setIsPaused(false);
+    announcePolite(`Retrying AI explanation for page ${currentPage}...`);
+
+    try {
+      const data = await api.retryPage(documentId, currentPage);
+      setPageData(data);
+      announcePolite(`Page ${data.page_number} processed with ${data.blocks.length} cards.`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Retry failed.';
+      setErrorMessage(msg);
+      announceAssertive(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [documentId, currentPage, announceAssertive, announcePolite]);
+
   useEffect(() => {
     let isSubscribed = true;
     api.getDocumentBlocks(documentId, currentPage)
@@ -732,6 +753,55 @@ function ReaderView() {
             <p className="text-slate-700 font-bold text-base">
               Structuring plain-English explanation cards for Page {currentPage}...
             </p>
+          </div>
+        )}
+
+        {/* Page Explanation Failure Alert with Retry */}
+        {!isLoading && pageData?.page_status === 'failed' && (
+          <aside
+            role="alert"
+            className="p-5 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs"
+          >
+            <div>
+              <strong className="font-bold block text-sm text-amber-950">
+                AI visual explanation is unavailable for Page {currentPage}.
+              </strong>
+              <p className="text-xs text-amber-900 mt-1">
+                {pageData.error_message || 'The AI service encountered an issue processing this page.'}
+                {pageData.blocks.length > 0 && ' You are currently reading exact raw extracted text.'}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleRetryPage}
+              className="shrink-0 bg-white border-amber-400 hover:bg-amber-100 text-amber-950 font-bold"
+            >
+              Retry AI Explanation
+            </Button>
+          </aside>
+        )}
+
+        {/* Empty Page State when No Text or Visuals Available */}
+        {!isLoading && pageData && pageData.blocks.length === 0 && (
+          <div
+            className="bg-white rounded-3xl p-12 text-center space-y-4 border border-slate-200 shadow-sm"
+            role="status"
+          >
+            <AlertCircle className="h-10 w-10 text-amber-600 mx-auto" aria-hidden="true" />
+            <h3 className="text-lg font-bold text-slate-900">
+              No Content Available for Page {currentPage}
+            </h3>
+            <p className="text-sm text-slate-600 max-w-md mx-auto">
+              {pageData.error_message || 'No text or visual diagrams could be extracted from this page.'}
+            </p>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={handleRetryPage}
+            >
+              Retry Page
+            </Button>
           </div>
         )}
 

@@ -261,41 +261,10 @@ def get_page_blocks(
 
     blocks = db.query(Block).filter(Block.page_id == page.id).order_by(Block.order_index).all()
 
-    # If blocks don't exist yet, auto-create them so audio reader works immediately
-    if not blocks:
-        raw_text = (page.ocr_text or "").strip()
-        if not raw_text:
-            raw_text = f"Study worksheet page {page_number}. Visual explanation is ready."
-
-        paragraphs = [p.strip() for p in raw_text.split("\n\n") if p.strip()]
-        if not paragraphs:
-            paragraphs = [raw_text]
-
-        new_blocks = []
-        for idx, para in enumerate(paragraphs, start=1):
-            b_type = "text"
-            lower = para.lower()
-            if any(k in lower for k in ["diagram", "figure", "illustration"]):
-                b_type = "diagram"
-            elif any(k in lower for k in ["formula", "equation", "="]):
-                b_type = "formula"
-            elif any(k in lower for k in ["flowchart", "step"]):
-                b_type = "flowchart"
-            elif any(k in lower for k in ["table", "column"]):
-                b_type = "table"
-
-            blk = Block(
-                page_id=page.id,
-                order_index=idx,
-                block_type=b_type,
-                explanation_text=para
-            )
-            db.add(blk)
-            new_blocks.append(blk)
-        db.commit()
-        for b in new_blocks:
-            db.refresh(b)
-        blocks = new_blocks
+    # If blocks have not been generated yet, process this page directly
+    if not blocks and page.status != "failed":
+        blocks = VisionService.process_page_blocks(page, db)
+        db.refresh(page)
 
     block_items = [
         ExplanationBlockItem(
@@ -304,7 +273,8 @@ def get_page_blocks(
             order_index=b.order_index,
             block_type=b.block_type,
             explanation_text=b.explanation_text,
-            title=f"{b.block_type.capitalize()} Section {b.order_index}"
+            title=b.title or f"{b.block_type.capitalize()} Section {b.order_index}",
+            page_number=page.page_number,
         )
         for b in blocks
     ]
@@ -313,6 +283,62 @@ def get_page_blocks(
         document_id=doc.id,
         page_number=page.page_number,
         total_pages=doc.page_count,
+        page_status=page.status,
+        error_message=page.error_message,
+        blocks=block_items
+    )
+
+
+@router.post(
+    "/{document_id}/pages/{page_number}/retry",
+    response_model=PageBlocksResponse,
+    summary="Retry Vision AI analysis for a failed page"
+)
+def retry_page_processing(
+    document_id: int,
+    page_number: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Allows the student to retry an AI explanation if a prior call failed due to a transient error.
+    """
+    doc = db.query(Document).filter(
+        Document.id == document_id,
+        Document.user_id == current_user.id
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    page = db.query(Page).filter(
+        Page.document_id == document_id,
+        Page.page_number == page_number
+    ).first()
+    if not page:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
+
+    blocks = VisionService.process_page_blocks(page, db)
+    db.refresh(page)
+
+    block_items = [
+        ExplanationBlockItem(
+            id=b.id,
+            page_id=b.page_id,
+            order_index=b.order_index,
+            block_type=b.block_type,
+            explanation_text=b.explanation_text,
+            title=b.title or f"{b.block_type.capitalize()} Section {b.order_index}",
+            page_number=page.page_number,
+        )
+        for b in blocks
+    ]
+
+    return PageBlocksResponse(
+        document_id=doc.id,
+        page_number=page.page_number,
+        total_pages=doc.page_count,
+        page_status=page.status,
+        error_message=page.error_message,
         blocks=block_items
     )
 

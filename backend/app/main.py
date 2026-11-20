@@ -24,19 +24,46 @@ if "backend" not in sys.modules:
     except Exception:
         pass
 
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from backend.app.config import get_settings
 from backend.app.database import get_db, init_db
 from backend.app.routers.auth import router as auth_router
 from backend.app.routers.documents import router as documents_router
 from backend.app.routers.admin import router as admin_router
 from backend.app.routers.audio import router as audio_router
 
+logger = logging.getLogger("netrasaathi.main")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Server startup and shutdown lifecycle management.
+    Validates OpenAI API configuration on startup and issues clear warnings.
+    """
+    settings = get_settings()
+    api_key = settings.OPENAI_API_KEY
+    if not api_key or api_key in ["mock", "test", ""] or api_key.startswith("your_openai"):
+        logger.warning(
+            "CRITICAL CONFIGURATION WARNING: OPENAI_API_KEY is not set or is a placeholder. "
+            "AI Vision diagram explanations and OpenAI neural voice will be unavailable. "
+            "Only grounded raw OCR text reading and offline browser speech will function."
+        )
+    else:
+        logger.info(
+            f"Netrasaathi backend initialized with vision model '{settings.OPENAI_VISION_MODEL}' "
+            f"and default model '{settings.MODEL_NAME}'."
+        )
+    yield
+
 
 app = FastAPI(
     title="Netrasaathi API",
     description="Voice-first study assistant backend for visually impaired students.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Initialize database tables on server import if not running under unit tests
