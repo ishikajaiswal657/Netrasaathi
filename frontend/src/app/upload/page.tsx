@@ -211,8 +211,9 @@ export default function UploadPage() {
     }
 
     if (!token) {
-      announceAssertive('Your session has expired. Please sign in again.');
-      router.push('/login');
+      const msg = 'You are not logged in. Please log in to upload and save study documents.';
+      setErrorMessage(msg);
+      announceAssertive(msg);
       return;
     }
 
@@ -227,9 +228,15 @@ export default function UploadPage() {
       startStatusPolling(res.id, token);
     } catch (err: unknown) {
       setIsUploading(false);
-      if (err instanceof Error && err.message.includes('401')) {
-        announceAssertive('Your authentication token has expired. Please log in.');
-        router.push('/login');
+      const rawMsg = err instanceof Error ? err.message : '';
+      if (
+        (err as { status?: number }).status === 401 ||
+        rawMsg.includes('401') ||
+        rawMsg.toLowerCase().includes('session has expired') ||
+        rawMsg.toLowerCase().includes('log in again')
+      ) {
+        setErrorMessage('Your session has expired or you are not signed in. Please log in to upload.');
+        announceAssertive('Your session has expired. Please log in.');
         return;
       }
       const rawMsg = err instanceof Error ? err.message : '';
@@ -306,6 +313,33 @@ export default function UploadPage() {
           </div>
         </div>
 
+        {/* Unauthenticated Alert Banner */}
+        {!token && (
+          <div
+            role="note"
+            className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs"
+          >
+            <div className="flex items-center gap-3">
+              <ShieldCheck className="h-5 w-5 text-blue-600 shrink-0" aria-hidden="true" />
+              <div>
+                <strong className="font-bold block text-sm text-blue-950">Student Login Required</strong>
+                <p className="text-xs text-blue-800">
+                  Courseware uploads are securely tied to your student profile. Please log in or sign up before uploading.
+                </p>
+              </div>
+            </div>
+            <Link href="/login" className="self-end sm:self-center">
+              <Button
+                type="button"
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs py-1.5 px-4 rounded-lg cursor-pointer shadow-xs"
+              >
+                Log In
+              </Button>
+            </Link>
+          </div>
+        )}
+
         {/* Server Standby / Waking Notification */}
         {isServerWaking && (
           <div
@@ -320,7 +354,7 @@ export default function UploadPage() {
           </div>
         )}
 
-        {/* Error Alert with Retry */}
+        {/* Error Alert with Retry or Login Action */}
         {errorMessage && (
           <div
             role="alert"
@@ -334,7 +368,18 @@ export default function UploadPage() {
               </div>
             </div>
             <div className="flex items-center gap-2 self-end sm:self-center">
-              {file && (
+              {errorMessage.toLowerCase().includes('log in') || errorMessage.toLowerCase().includes('session') ? (
+                <Link href="/login">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs py-1.5 px-3 rounded-lg cursor-pointer"
+                    aria-label="Go to login page"
+                  >
+                    Log In Now
+                  </Button>
+                </Link>
+              ) : file ? (
                 <Button
                   type="button"
                   size="sm"
@@ -344,7 +389,7 @@ export default function UploadPage() {
                 >
                   Retry Upload
                 </Button>
-              )}
+              ) : null}
               <button
                 type="button"
                 onClick={() => setErrorMessage('')}
@@ -534,16 +579,29 @@ export default function UploadPage() {
                 Cancel
               </Button>
             </Link>
-            <Button
-              type="submit"
-              size="md"
-              isLoading={isUploading}
-              disabled={!file || isUploading}
-              className="gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-xs"
-            >
-              <Upload className="h-4 w-4" aria-hidden="true" />
-              <span>Upload Document</span>
-            </Button>
+            {token ? (
+              <Button
+                type="submit"
+                size="md"
+                isLoading={isUploading}
+                disabled={!file || isUploading}
+                className="gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-xs"
+              >
+                <Upload className="h-4 w-4" aria-hidden="true" />
+                <span>Upload Document</span>
+              </Button>
+            ) : (
+              <Link href="/login">
+                <Button
+                  type="button"
+                  size="md"
+                  className="gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-xs"
+                >
+                  <Upload className="h-4 w-4" aria-hidden="true" />
+                  <span>Log In to Upload Document</span>
+                </Button>
+              </Link>
+            )}
           </div>
         </form>
       </div>
