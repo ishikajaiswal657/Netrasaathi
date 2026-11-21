@@ -177,7 +177,7 @@ class TestQAService(unittest.TestCase):
         )
 
         self.assertEqual(relevant_pages, [])
-        self.assertIn("could not find an answer", answer.lower())
+        self.assertEqual(answer, "I cannot find that information in your uploaded document.")
 
     def test_audit_log_privacy(self):
         """Audit trail must record action 'ask' without saving the raw student question string (FR16)."""

@@ -188,7 +188,7 @@ export default function HomePage() {
                   )}
                 </button>
                 <p className="text-[11px] font-semibold text-slate-500">
-                  Powered by OpenAI Flagship Neural TTS (nova)
+                  Accessible speech synthesis with multi-language support
                 </p>
               </div>
             </div>

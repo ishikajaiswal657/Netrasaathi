@@ -38,17 +38,41 @@ from backend.app.services.pipeline import cleanup_stale_processing_jobs
 logger = logging.getLogger("netrasaathi.main")
 
 
+def validate_production_security(settings) -> None:
+    """
+    Validates cryptographic and operational security parameters for production deployment.
+    Rejects default/insecure secret keys that would allow JWT tampering.
+    """
+    is_production = os.environ.get("ENVIRONMENT") == "production" or os.environ.get("RENDER") == "true"
+    insecure_keys = [
+        "temporary_dev_secret_key_change_in_production_32chars",
+        "dev_secret_key_change_in_production",
+        "secret",
+        "change_me",
+    ]
+    if is_production and any(settings.SECRET_KEY.strip() == k or "change_in_production" in settings.SECRET_KEY for k in insecure_keys):
+        raise RuntimeError(
+            "CRITICAL SECURITY ERROR: The default development SECRET_KEY is not permitted in production. "
+            "Please configure a strong, unique SECRET_KEY in your environment variables."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Server startup and shutdown lifecycle management.
-    Validates OpenAI API configuration and recovers any documents interrupted by prior restarts.
+    Validates security parameters, database migrations, and recovers any documents interrupted by prior restarts.
     """
-    # 1. Apply database migrations if not under unit tests
+    settings = get_settings()
+
+    # 1. Enforce production security hygiene: reject default dev secret key in production
+    validate_production_security(settings)
+
+    # 2. Apply database migrations if not under unit tests
     if not os.environ.get("TESTING"):
         apply_migrations()
 
-    # 2. Recover stale processing documents so nothing is stuck forever
+    # 3. Recover stale processing documents so nothing is stuck forever
     if not os.environ.get("TESTING"):
         try:
             db = SessionLocal()
@@ -57,8 +81,7 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.warning(f"Could not run startup job cleanup: {exc}")
 
-    # 3. Check OpenAI API credentials without logging keys
-    settings = get_settings()
+    # 4. Check OpenAI API credentials without logging keys
     api_key = settings.OPENAI_API_KEY
     if not api_key or api_key in ["mock", "test", ""] or api_key.startswith("your_openai"):
         logger.warning(

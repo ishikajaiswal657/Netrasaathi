@@ -152,8 +152,7 @@ class QAService:
 
         if not matched_passages:
             return (
-                "I could not find an answer to that question in your study document. "
-                "Please ask about the diagrams, flowcharts, or topics covered on these pages.",
+                "I cannot find that information in your uploaded document.",
                 [],
             )
 
@@ -182,8 +181,9 @@ class QAService:
                     "1. Answer strictly using ONLY the provided excerpts below.\n"
                     "2. Explain in clear, easy-to-understand spoken words without difficult jargon.\n"
                     "3. Always mention the page number (e.g., 'According to Page 1...').\n"
-                    "4. If the excerpt does not contain the answer, say honestly that it is not covered.\n"
-                    "5. Keep the explanation concise and voice-friendly (2-4 sentences)."
+                    "4. If the excerpt does not contain the answer, say exactly: 'I cannot find that information in your uploaded document.'\n"
+                    "5. Do not use outside knowledge or speculate beyond the provided text.\n"
+                    "6. Keep the explanation concise and voice-friendly (2-4 sentences)."
                 )
 
                 response = client.chat.completions.create(
@@ -199,7 +199,7 @@ class QAService:
                         },
                     ],
                     max_tokens=400,
-                    temperature=0.2,
+                    temperature=0.1,
                 )
 
                 answer_text = response.choices[0].message.content
