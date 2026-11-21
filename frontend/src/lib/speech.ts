@@ -59,9 +59,44 @@ if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
 }
 
 /**
+ * Splits text into logical sentence chunks based on standard punctuation.
+ * Allows speech synthesis to begin speaking immediately on chunk 1 while
+ * subsequent sentences are queued, preventing 10-20s pauses on long paragraphs.
+ */
+export function splitIntoSentences(text: string): string[] {
+  if (!text || !text.trim()) return [];
+  // Split on sentence terminators: '.', '?', '!', '।', or newlines
+  const rawChunks = text.split(/(?<=[.?!।\n])\s+/);
+  const result: string[] = [];
+  let buffer = '';
+
+  for (const chunk of rawChunks) {
+    const trimmed = chunk.trim();
+    if (!trimmed) continue;
+    // Only combine if preceding buffer is an abbreviation/fragment (e.g. 'Fig. 1', 'Dr.', 'i.e.')
+    if (buffer && buffer.length < 15) {
+      buffer += ' ' + trimmed;
+    } else {
+      if (buffer) result.push(buffer);
+      buffer = trimmed;
+    }
+  }
+  if (buffer) result.push(buffer);
+  return result.length > 0 ? result : [text.trim()];
+}
+
+/**
+ * Detects whether the text is predominantly Latin (English), Devanagari (Hindi/Marathi), or other Indic script.
+ */
+export function detectScript(text: string): 'latin' | 'devanagari' | 'indic' {
+  if (/[\u0900-\u097F]/.test(text)) return 'devanagari';
+  if (/[\u0980-\u0DFF]/.test(text)) return 'indic';
+  return 'latin';
+}
+
+/**
  * Streams neural speech synthesis from backend using OpenAI TTS engine (tts-1-hd, nova voice).
- * Guarantees crystal-clear human articulation with authentic Indian pronunciation.
- * Incorporates generational concurrency tokens and network AbortControllers to prevent overlapping audio.
+ * Bounded by a strict 1500ms network timeout so client immediately falls back to browser TTS if sleeping.
  */
 export async function playBackendTTS(
   text: string,
@@ -72,6 +107,7 @@ export async function playBackendTTS(
   if (playbackId !== currentPlaybackId) return false;
 
   const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 1500);
   currentAbortController = controller;
 
   try {
@@ -95,9 +131,11 @@ export async function playBackendTTS(
         body: payload,
         signal: controller.signal,
       });
-    } catch (directErr) {
-      if (playbackId !== currentPlaybackId) return false;
-      // Direct call failed, attempt relative path proxied by Next.js
+    } catch {
+      if (playbackId !== currentPlaybackId) {
+        clearTimeout(timeoutId);
+        return false;
+      }
       try {
         response = await fetch('/api/v1/audio/tts', {
           method: 'POST',
@@ -106,10 +144,12 @@ export async function playBackendTTS(
           signal: controller.signal,
         });
       } catch {
+        clearTimeout(timeoutId);
         return false;
       }
     }
 
+    clearTimeout(timeoutId);
     if (playbackId !== currentPlaybackId) return false;
 
     if (!response || !response.ok) {
@@ -119,7 +159,7 @@ export async function playBackendTTS(
     const audioBlob = await response.blob();
     if (playbackId !== currentPlaybackId) return false;
 
-    // Hard stop any previous audio or utterance before initializing new stream
+    // Stop any previous audio or utterance before starting new stream
     if (currentAudioElement) {
       currentAudioElement.pause();
       currentAudioElement.currentTime = 0;
@@ -161,12 +201,13 @@ export async function playBackendTTS(
     } catch (playErr) {
       if (playbackId !== currentPlaybackId) return false;
       console.warn('Audio play interrupted or blocked:', playErr);
+      return false;
     }
 
     return true;
   } catch (err) {
+    clearTimeout(timeoutId);
     if (playbackId !== currentPlaybackId) return false;
-    console.error('playBackendTTS error:', err);
     return false;
   }
 }
@@ -185,13 +226,21 @@ export function getAvailableVoices(): SpeechSynthesisVoice[] {
 }
 
 /**
- * Finds the best voice matching the chosen language code.
+ * Finds the best voice matching the chosen language code and script.
+ * If text is English (Latin script) but the user selected Hindi, an Indian English
+ * voice (en-IN) is returned so pronunciation is authentic and non-garbled.
  */
-export function findVoiceForLanguage(langCode: string): SpeechSynthesisVoice | null {
+export function findVoiceForLanguage(langCode: string, sampleText?: string): SpeechSynthesisVoice | null {
   const voices = getAvailableVoices();
   if (!voices || voices.length === 0) return null;
 
-  const normalizedTarget = langCode.replace('_', '-').toLowerCase();
+  let normalizedTarget = langCode.replace('_', '-').toLowerCase();
+
+  // If text is purely Latin script but target is Indic, choose en-IN so English is spoken clearly
+  if (sampleText && detectScript(sampleText) === 'latin' && !normalizedTarget.startsWith('en')) {
+    normalizedTarget = 'en-in';
+  }
+
   const prefix = normalizedTarget.split('-')[0];
 
   // 1. Exact match on language tag (e.g. 'hi-in' === 'hi-in')
@@ -202,7 +251,7 @@ export function findVoiceForLanguage(langCode: string): SpeechSynthesisVoice | n
   const matchedPrefix = voices.find((v) => v.lang.replace('_', '-').toLowerCase().startsWith(prefix));
   if (matchedPrefix) return matchedPrefix;
 
-  // 3. Name match for multilingual voices on Chrome/Edge (e.g., 'Microsoft Swara Online (Natural) - Hindi')
+  // 3. Name match for multilingual voices on Chrome/Edge
   const langKeywords: Record<string, string[]> = {
     hi: ['hindi', 'हिन्दी', 'swara', 'madhur'],
     ta: ['tamil', 'தமிழ்', 'valluvar'],
@@ -211,7 +260,7 @@ export function findVoiceForLanguage(langCode: string): SpeechSynthesisVoice | n
     mr: ['marathi', 'मराठी', 'aarohi'],
     ml: ['malayalam', 'മലയാളം', 'midhun'],
     es: ['spanish', 'español'],
-    en: ['india', 'ravi', 'heera', 'neerja', 'prabhat'],
+    en: ['india', 'ravi', 'heera', 'neerja', 'prabhat', 'natural'],
   };
 
   const keywords = langKeywords[prefix];
@@ -227,8 +276,8 @@ export function findVoiceForLanguage(langCode: string): SpeechSynthesisVoice | n
 }
 
 /**
- * Speaks the provided text using OpenAI Neural Backend TTS as the primary studio engine
- * for all Indian languages and Indian English (en-IN), preventing any dual voice overlap.
+ * Speaks the provided text using fast sentence-chunked speech synthesis.
+ * Plays the first sentence instantly without network delay and queues subsequent sentences smoothly.
  */
 export async function speakText(text: string, options: SpeechOptions = {}): Promise<void> {
   // Hard stop any ongoing speech or audio immediately
@@ -237,71 +286,77 @@ export async function speakText(text: string, options: SpeechOptions = {}): Prom
   // Increment sequence ID: any in-flight request is immediately invalidated
   const playbackId = ++currentPlaybackId;
 
-  // PRIORITY 1: ALWAYS route through high-definition OpenAI Neural TTS (tts-1-hd, nova)
-  // This guarantees clear Indian-accented English and native South Asian pronunciation.
-  const success = await playBackendTTS(text, options, playbackId);
-  if (playbackId !== currentPlaybackId) {
-    // A newer speech request was made while fetching this one
-    return;
-  }
-  if (success) {
-    return;
+  // Split text into natural sentence chunks
+  const sentences = splitIntoSentences(text);
+  if (sentences.length === 0) return;
+
+  const script = detectScript(text);
+  const targetLang =
+    script === 'latin' && options.lang && !options.lang.startsWith('en')
+      ? 'en-IN'
+      : options.lang || 'en-IN';
+
+  // Optional: Attempt backend neural TTS ONLY if explicitly enabled
+  if (process.env.NEXT_PUBLIC_ENABLE_BACKEND_TTS === 'true') {
+    const success = await playBackendTTS(text, { ...options, lang: targetLang }, playbackId);
+    if (playbackId !== currentPlaybackId) return;
+    if (success) return;
   }
 
-  // FALLBACK ONLY: If backend is completely unreachable, fall back to browser Web Speech API
+  // Instant browser Web Speech API playback with sentence chunking
   if (!isSpeechSynthesisSupported()) {
     console.warn('SpeechSynthesis is not supported in this browser.');
     options.onError?.('SpeechSynthesis is not supported in this browser.');
     return;
   }
 
-  const targetLang = options.lang || 'en-IN';
-  const matchedVoice = findVoiceForLanguage(targetLang);
+  const matchedVoice = findVoiceForLanguage(targetLang, text);
+  let chunkIndex = 0;
 
-  const utterance = new SpeechSynthesisUtterance(text);
-  activeUtterance = utterance;
-
-  utterance.lang = targetLang;
-  utterance.rate = Math.max(0.75, Math.min(options.rate ?? 1.0, 1.5));
-  utterance.pitch = Math.max(0.8, Math.min(options.pitch ?? 1.0, 1.2));
-
-  if (matchedVoice) {
-    utterance.voice = matchedVoice;
-  }
-
-  utterance.onboundary = (event) => {
-    if (playbackId === currentPlaybackId) {
-      options.onBoundary?.(event.charIndex, event.charLength);
-    }
-  };
-
-  utterance.onstart = () => {
-    if (playbackId === currentPlaybackId) {
-      options.onStart?.();
-    }
-  };
-
-  utterance.onend = () => {
-    if (activeUtterance === utterance) {
-      activeUtterance = null;
-    }
-    if (playbackId === currentPlaybackId) {
+  const playNextChunk = () => {
+    if (playbackId !== currentPlaybackId) return;
+    if (chunkIndex >= sentences.length) {
       options.onEnd?.();
+      return;
     }
-  };
 
-  utterance.onerror = (event) => {
-    if (activeUtterance === utterance) {
-      activeUtterance = null;
+    const currentSentence = sentences[chunkIndex];
+    const utterance = new SpeechSynthesisUtterance(currentSentence);
+    activeUtterance = utterance;
+
+    utterance.lang = targetLang;
+    utterance.rate = Math.max(0.75, Math.min(options.rate ?? 0.95, 1.4));
+    utterance.pitch = Math.max(0.8, Math.min(options.pitch ?? 1.0, 1.2));
+
+    if (matchedVoice) {
+      utterance.voice = matchedVoice;
     }
-    if (event.error !== 'interrupted' && event.error !== 'canceled') {
-      if (playbackId === currentPlaybackId) {
-        options.onError?.(event);
+
+    if (chunkIndex === 0) {
+      utterance.onstart = () => {
+        if (playbackId === currentPlaybackId) {
+          options.onStart?.();
+        }
+      };
+    }
+
+    utterance.onend = () => {
+      chunkIndex++;
+      playNextChunk();
+    };
+
+    utterance.onerror = (event) => {
+      if (event.error !== 'interrupted' && event.error !== 'canceled') {
+        if (playbackId === currentPlaybackId) {
+          options.onError?.(event);
+        }
       }
-    }
+    };
+
+    window.speechSynthesis.speak(utterance);
   };
 
-  window.speechSynthesis.speak(utterance);
+  playNextChunk();
 }
 
 export function pauseSpeech(): void {

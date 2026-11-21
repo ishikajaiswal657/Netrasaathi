@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { formatBytes, getBlockTypeDetails, getStatusDetails } from '../lib/utils';
-import { parseVoiceCommand, SUPPORTED_LANGUAGES } from '../lib/speech';
+import { parseVoiceCommand, SUPPORTED_LANGUAGES, splitIntoSentences, detectScript } from '../lib/speech';
 import { shouldShowDemoBanner } from '../components/ui/DemoBanner';
 import {
   MOCK_STUDENT_USER,
@@ -86,6 +86,31 @@ describe('Phase 5: Spoken Audio Reader & Multi-Language Accessibility', () => {
     assert.ok(codes.includes('mr-IN'), 'Must include Marathi');
     assert.ok(codes.includes('ml-IN'), 'Must include Malayalam');
     assert.ok(codes.includes('es-ES'), 'Must include Spanish');
+  });
+});
+
+describe('Phase 6: Fast Voice & Sentence Chunking', () => {
+  it('correctly splits long text paragraphs into sentence chunks for instant low-latency speech', () => {
+    const text = 'First sentence explains the diagram. Second sentence details the flow! Third sentence concludes.';
+    const chunks = splitIntoSentences(text);
+    assert.equal(chunks.length, 3);
+    assert.equal(chunks[0], 'First sentence explains the diagram.');
+    assert.equal(chunks[1], 'Second sentence details the flow!');
+    assert.equal(chunks[2], 'Third sentence concludes.');
+  });
+
+  it('handles Hindi poorn viram (।) sentence terminators properly', () => {
+    const hindiText = 'यह पहला वाक्य है। यह दूसरा वाक्य है।';
+    const chunks = splitIntoSentences(hindiText);
+    assert.equal(chunks.length, 2);
+    assert.equal(chunks[0], 'यह पहला वाक्य है।');
+    assert.equal(chunks[1], 'यह दूसरा वाक्य है।');
+  });
+
+  it('accurately detects Latin vs Devanagari script for voice selection', () => {
+    assert.equal(detectScript('OSI Model Layer 7 Application Layer'), 'latin');
+    assert.equal(detectScript('नेत्रसाथी आवाज़ अध्ययन सहायक'), 'devanagari');
+    assert.equal(detectScript('கணினி நெட்வொர்க்கிங்'), 'indic');
   });
 });
 
