@@ -14,29 +14,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install Python requirements
-COPY requirements.txt .
+# Copy requirements from current context or parent
+COPY requirements.txt* backend/requirements.txt* /tmp/
+RUN cp /tmp/requirements.txt /app/requirements.txt 2>/dev/null || cp /tmp/backend/requirements.txt /app/requirements.txt 2>/dev/null || true
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r /app/requirements.txt && \
     python -m spacy download en_core_web_sm || true
 
-# Copy application source code into both /app and /app/backend to guarantee all import paths resolve
+# Copy source
 COPY . /app/
-RUN mkdir -p /app/backend && cp -r /app/app /app/backend/app 2>/dev/null || true
+
+# Normalize directory layout so both 'from backend.app...' and 'from app...' resolve
+RUN if [ -d /app/backend/app ]; then \
+        mkdir -p /app/app && cp -r /app/backend/app/* /app/app/ 2>/dev/null || true; \
+    elif [ -d /app/app ]; then \
+        mkdir -p /app/backend && cp -r /app/app /app/backend/app 2>/dev/null || true; \
+    fi
 
 # Set environment variables for Python
 ENV PYTHONPATH="/app:/app/backend:${PYTHONPATH}"
 ENV PYTHONUNBUFFERED=1
 
-# Create storage directory for uploaded files and SQLite DB
-RUN mkdir -p /app/storage /app/data /app/backend/storage /app/backend/data
-
 # Expose default port
 EXPOSE 8000
 
-# Health check to ensure container is responsive
+# Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
 # Start FastAPI with single Uvicorn worker to stay safely within 512MB RAM on Render
-CMD ["sh", "-c", "if [ -d /app/backend ]; then uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1; else uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1; fi"]
+CMD ["sh", "-c", "uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 || uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
