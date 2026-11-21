@@ -1,7 +1,7 @@
 # Production Dockerfile for Netrasaathi Backend on Render / Railway
 FROM python:3.11-slim
 
-# Install system dependencies for Tesseract OCR and PDF rendering
+# Install system dependencies for Tesseract OCR and image processing
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-eng \
@@ -14,25 +14,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy requirements from current context or parent
-COPY requirements.txt* backend/requirements.txt* /tmp/
-RUN cp /tmp/requirements.txt /app/requirements.txt 2>/dev/null || cp /tmp/backend/requirements.txt /app/requirements.txt 2>/dev/null || true
+# Install Python requirements
+COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r /app/requirements.txt && \
+    pip install --no-cache-dir -r requirements.txt && \
     python -m spacy download en_core_web_sm || true
 
-# Copy source
+# Copy application source code into both /app and /app/backend to guarantee all import paths resolve
+COPY . /app/backend/
 COPY . /app/
 
-# Normalize directory layout so both 'from backend.app...' and 'from app...' resolve
-RUN if [ -d /app/backend/app ]; then \
-        mkdir -p /app/app && cp -r /app/backend/app/* /app/app/ 2>/dev/null || true; \
-    elif [ -d /app/app ]; then \
-        mkdir -p /app/backend && cp -r /app/app /app/backend/app 2>/dev/null || true; \
-    fi
-
-# Set environment variables for Python
-ENV PYTHONPATH="/app:/app/backend:${PYTHONPATH}"
+# Set environment variables for Python module resolution
+ENV PYTHONPATH="/app:/app/backend"
 ENV PYTHONUNBUFFERED=1
 
 # Expose default port
