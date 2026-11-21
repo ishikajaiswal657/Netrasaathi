@@ -100,18 +100,30 @@ class TestSecurityAuditAndIsolation(unittest.TestCase):
         self.db.close()
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
-    def test_production_rejects_insecure_default_secret_key(self):
-        """Production startup must raise RuntimeError if SECRET_KEY is the insecure dev default."""
+    def test_production_rejects_insecure_default_secret_key_in_strict_mode(self):
+        """Production startup in strict mode must raise RuntimeError if SECRET_KEY is the insecure dev default."""
         from backend.app.main import validate_production_security
 
         mock_cfg = MagicMock()
         mock_cfg.SECRET_KEY = "temporary_dev_secret_key_change_in_production_32chars"
 
-        with patch.dict(os.environ, {"ENVIRONMENT": "production"}):
+        with patch.dict(os.environ, {"ENVIRONMENT": "production", "STRICT_SECURITY": "true"}):
             with self.assertRaises(RuntimeError) as ctx:
                 validate_production_security(mock_cfg)
 
             self.assertIn("default development SECRET_KEY is not permitted in production", str(ctx.exception))
+
+    def test_production_generates_safe_key_when_omitted(self):
+        """On cloud deploy without custom key, securely generates a 256-bit key instead of failing."""
+        from backend.app.main import validate_production_security
+
+        mock_cfg = MagicMock()
+        mock_cfg.SECRET_KEY = "temporary_dev_secret_key_change_in_production_32chars"
+
+        with patch.dict(os.environ, {"RENDER": "true"}):
+            validate_production_security(mock_cfg)
+            self.assertNotEqual(mock_cfg.SECRET_KEY, "temporary_dev_secret_key_change_in_production_32chars")
+            self.assertEqual(len(mock_cfg.SECRET_KEY), 64)
 
     def test_production_allows_strong_custom_secret_key(self):
         """Production startup must succeed when a secure, non-default SECRET_KEY is provided."""
@@ -123,6 +135,7 @@ class TestSecurityAuditAndIsolation(unittest.TestCase):
         with patch.dict(os.environ, {"ENVIRONMENT": "production"}):
             # Must execute cleanly without raising any exception
             validate_production_security(mock_cfg)
+            self.assertEqual(mock_cfg.SECRET_KEY, "c8f1e94a82d043b28f731a54b9d0e2c6f1a8b3d5e7c90a1b2c3d4e5f6a7b8c9d")
 
     def test_tenant_isolation_get_document(self):
         """User B must not be able to retrieve User A's document details."""
