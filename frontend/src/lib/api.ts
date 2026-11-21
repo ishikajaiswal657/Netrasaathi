@@ -399,7 +399,7 @@ export const api = {
    * Upload Document (PDF, JPG, PNG)
    * Route: POST /documents
    */
-  async uploadDocument(file: File, token?: string | null): Promise<DocumentItem> {
+  async uploadDocument(file: File, token?: string | null, signal?: AbortSignal): Promise<DocumentItem> {
     if (isMockModeActive()) {
       return mockAdapter.uploadDocument(file);
     }
@@ -411,6 +411,7 @@ export const api = {
       {
         method: 'POST',
         body: formData,
+        signal,
       },
       token
     );

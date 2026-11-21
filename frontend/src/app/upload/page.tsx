@@ -222,13 +222,26 @@ export default function UploadPage() {
     setUploadProgress(100);
     announcePolite('Uploading document to server...');
 
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => {
+      abortController.abort();
+    }, 45000);
+
     try {
-      const res = await api.uploadDocument(file, token);
+      const res = await api.uploadDocument(file, token, abortController.signal);
+      clearTimeout(timeoutId);
       setIsUploading(false);
       startStatusPolling(res.id, token);
     } catch (err: unknown) {
+      clearTimeout(timeoutId);
       setIsUploading(false);
       const rawMsg = err instanceof Error ? err.message : '';
+      if (err instanceof Error && err.name === 'AbortError') {
+        const msg = 'Upload request timed out after 45 seconds. The cloud server may still be processing. Please retry.';
+        setErrorMessage(msg);
+        announceAssertive(msg);
+        return;
+      }
       if (
         (err as { status?: number }).status === 401 ||
         rawMsg.includes('401') ||
@@ -512,12 +525,15 @@ export default function UploadPage() {
           {isUploading && (
             <div className="space-y-2 p-4 rounded-2xl bg-blue-50 border border-blue-200" aria-live="polite" role="status">
               <div className="flex justify-between text-xs font-bold text-blue-900">
-                <span>Uploading document to server...</span>
-                <span>100%</span>
+                <span className="flex items-center gap-2">
+                  <span className="h-3 w-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                  <span>Uploading {file?.name || 'document'} to cloud server...</span>
+                </span>
+                <span className="text-blue-700">Connecting...</span>
               </div>
               <div className="h-2 bg-blue-200 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-blue-600 transition-all duration-300 rounded-full"
+                  className="h-full bg-blue-600 animate-pulse rounded-full"
                   style={{ width: `100%` }}
                 />
               </div>
