@@ -34,5 +34,9 @@ RUN mkdir -p /app/storage /app/data /app/backend/storage /app/backend/data
 # Expose default port
 EXPOSE 8000
 
-# Start FastAPI with Uvicorn, dynamically binding to Render's $PORT or 8000
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Health check to ensure container is responsive
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
+
+# Start FastAPI with single Uvicorn worker to stay safely within 512MB RAM on Render
+CMD ["sh", "-c", "if [ -d /app/backend ]; then uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1; else uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1; fi"]

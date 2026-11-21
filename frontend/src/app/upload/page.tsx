@@ -37,6 +37,7 @@ export default function UploadPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isServerWaking, setIsServerWaking] = useState(false);
   const [processingStatusText, setProcessingStatusText] = useState('');
   const [pagesReady, setPagesReady] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -49,7 +50,28 @@ export default function UploadPage() {
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
+    // Check if cloud backend is currently awake
+    api.checkHealth().catch(() => {
+      if (isMounted) {
+        setIsServerWaking(true);
+        const wakeTimer = setInterval(async () => {
+          try {
+            await api.checkHealth();
+            clearInterval(wakeTimer);
+            if (isMounted) {
+              setIsServerWaking(false);
+              announcePolite('Cloud backend is active and ready.');
+            }
+          } catch {
+            // keep waking
+          }
+        }, 5000);
+      }
+    });
+
     return () => {
+      isMounted = false;
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
       }
@@ -210,7 +232,29 @@ export default function UploadPage() {
         router.push('/login');
         return;
       }
-      const msg = err instanceof Error ? err.message : 'Upload failed. Please try again.';
+      const rawMsg = err instanceof Error ? err.message : '';
+      let msg = rawMsg || 'Upload failed. Please try again.';
+
+      if (
+        rawMsg.toLowerCase().includes('failed to fetch') ||
+        rawMsg.toLowerCase().includes('network') ||
+        rawMsg.toLowerCase().includes('load failed')
+      ) {
+        msg = 'Cloud server was sleeping on standby (Render free plan). Waking up now; please wait about 30 seconds and click Retry Upload.';
+        setIsServerWaking(true);
+        const wakeTimer = setInterval(async () => {
+          try {
+            await api.checkHealth();
+            clearInterval(wakeTimer);
+            setIsServerWaking(false);
+            setErrorMessage('Server is now awake and ready! Click Retry Upload.');
+            announcePolite('Server is awake. Click Retry Upload to proceed.');
+          } catch {
+            // Keep waiting for wake-up
+          }
+        }, 5000);
+      }
+
       setErrorMessage(msg);
       announceAssertive(msg);
     }
@@ -261,6 +305,20 @@ export default function UploadPage() {
             </p>
           </div>
         </div>
+
+        {/* Server Standby / Waking Notification */}
+        {isServerWaking && (
+          <div
+            role="status"
+            className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center gap-3 shadow-xs"
+          >
+            <div className="h-4 w-4 rounded-full border-2 border-amber-600 border-t-transparent animate-spin shrink-0" aria-hidden="true" />
+            <div className="flex-1">
+              <strong className="font-bold block text-sm text-amber-950">Connecting to Cloud Backend...</strong>
+              <p className="text-xs text-amber-800">The server was on standby and is waking up (takes ~30s on Render free tier). You can still select your document.</p>
+            </div>
+          </div>
+        )}
 
         {/* Error Alert with Retry */}
         {errorMessage && (

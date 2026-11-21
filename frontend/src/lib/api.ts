@@ -544,4 +544,15 @@ export const api = {
     }
     return request<AdminStatsResponse>('/admin/stats', { method: 'GET' }, token);
   },
+
+  /**
+   * Health Check & Server Standby Probe
+   * Route: GET /health
+   */
+  async checkHealth(): Promise<{ status: string; service: string }> {
+    if (isMockModeActive()) {
+      return { status: 'ok', service: 'Netrasaathi Mock API' };
+    }
+    return request<{ status: string; service: string }>('/health', { method: 'GET' });
+  },
 };

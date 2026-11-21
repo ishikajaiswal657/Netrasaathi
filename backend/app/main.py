@@ -85,11 +85,12 @@ app = FastAPI(
 if not os.environ.get("TESTING"):
     init_db()
 
-# Enable CORS for the Next.js frontend (local dev, Vercel deployments, and custom domains)
+# Enable CORS for the Next.js frontend (local dev, Vercel production, and project preview deployments)
 cors_origins_env = os.environ.get("CORS_ORIGINS", "")
 allowed_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://netrasaathi-app.vercel.app",
 ]
 if cors_origins_env:
     for origin in cors_origins_env.split(","):
@@ -100,7 +101,7 @@ if cors_origins_env:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"^https://.*\.vercel\.app$",
+    allow_origin_regex=r"^https://netrasaathi.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -3,15 +3,6 @@ from typing import Any
 import os
 from PIL import Image, ImageDraw
 
-# Configure tldextract to operate offline without network checks or elevated OS cache permissions
-import tldextract
-tldextract.tldextract.TLD_EXTRACTOR = tldextract.TLDExtract(suffix_list_urls=(), cache_dir=None)
-
-from presidio_analyzer import AnalyzerEngine, PatternRecognizer, Pattern, RecognizerResult
-from presidio_analyzer.nlp_engine import NlpEngineProvider
-from presidio_anonymizer import AnonymizerEngine
-from presidio_anonymizer.entities import OperatorConfig
-
 from backend.app.config import get_settings
 
 settings = get_settings()
@@ -33,14 +24,24 @@ class PrivacyService:
     Detects Personally Identifiable Information (PII) using Microsoft Presidio and
     custom Indian regex recognizers, permanently scrubbing sensitive tokens from
     both text passages and rendered raster images before LLM vision ingestion.
+
+    Presidio and spaCy are lazy-loaded on first invocation to guarantee that server
+    startup and health checks execute in under 1 second without timing out on cloud hosts.
     """
 
-    _analyzer_instance: AnalyzerEngine | None = None
-    _anonymizer_instance: AnonymizerEngine | None = None
+    _analyzer_instance: Any = None
+    _anonymizer_instance: Any = None
 
     @classmethod
-    def get_analyzer(cls) -> AnalyzerEngine:
+    def get_analyzer(cls) -> Any:
         if cls._analyzer_instance is None:
+            # Lazy import to keep server boot time < 1s
+            import tldextract
+            tldextract.tldextract.TLD_EXTRACTOR = tldextract.TLDExtract(suffix_list_urls=(), cache_dir=None)
+
+            from presidio_analyzer import AnalyzerEngine, PatternRecognizer, Pattern
+            from presidio_analyzer.nlp_engine import NlpEngineProvider
+
             # Configure spaCy en_core_web_sm offline NLP engine
             nlp_configuration = {
                 "nlp_engine_name": "spacy",
@@ -93,13 +94,14 @@ class PrivacyService:
         return cls._analyzer_instance
 
     @classmethod
-    def get_anonymizer(cls) -> AnonymizerEngine:
+    def get_anonymizer(cls) -> Any:
         if cls._anonymizer_instance is None:
+            from presidio_anonymizer import AnonymizerEngine
             cls._anonymizer_instance = AnonymizerEngine()
         return cls._anonymizer_instance
 
     @classmethod
-    def analyze_text(cls, text: str) -> list[RecognizerResult]:
+    def analyze_text(cls, text: str) -> list[Any]:
         """Runs entity detection against the provided text."""
         if not text or not text.strip():
             return []
@@ -127,6 +129,7 @@ class PrivacyService:
         if not results:
             return text, 0, {}
 
+        from presidio_anonymizer.entities import OperatorConfig
         anonymizer = cls.get_anonymizer()
 
         # Build custom replacement tags per entity type
