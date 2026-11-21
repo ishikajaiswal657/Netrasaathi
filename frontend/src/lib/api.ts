@@ -100,22 +100,30 @@ async function request<T>(
     );
   }
 
-  if (response.status === 401) {
-    // Unauthorized / Expired session
-    removeToken();
-    throw new ApiError('Your session has expired. Please log in again.', 401);
-  }
-
-  if (response.status === 403) {
-    throw new ApiError('Access denied: You do not have permission to view this resource.', 403);
-  }
-
   let body: unknown;
   const contentType = response.headers.get('content-type');
   if (contentType && contentType.includes('application/json')) {
     body = await response.json();
   } else {
     body = await response.text();
+  }
+
+  if (response.status === 401) {
+    // Unauthorized / Expired session
+    removeToken();
+    const serverDetail =
+      typeof body === 'object' && body !== null && 'detail' in body
+        ? String((body as { detail: unknown }).detail)
+        : '';
+    const message =
+      endpoint.includes('/auth/login') || endpoint.includes('/auth/signup')
+        ? serverDetail || 'Invalid email or password. Please check your credentials or create an account.'
+        : serverDetail || 'Your session has expired. Please log in again.';
+    throw new ApiError(message, 401, body);
+  }
+
+  if (response.status === 403) {
+    throw new ApiError('Access denied: You do not have permission to view this resource.', 403);
   }
 
   if (!response.ok) {

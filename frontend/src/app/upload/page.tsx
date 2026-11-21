@@ -239,7 +239,6 @@ export default function UploadPage() {
         announceAssertive('Your session has expired. Please log in.');
         return;
       }
-      const rawMsg = err instanceof Error ? err.message : '';
       let msg = rawMsg || 'Upload failed. Please try again.';
 
       if (

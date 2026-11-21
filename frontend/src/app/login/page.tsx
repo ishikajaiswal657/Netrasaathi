@@ -83,10 +83,21 @@ export default function LoginPage() {
         {errorMessage && (
           <div
             role="alert"
-            className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm flex items-start gap-2.5 shadow-xs"
+            className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm flex flex-col gap-2 shadow-xs"
           >
-            <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" aria-hidden="true" />
-            <span>{errorMessage}</span>
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" aria-hidden="true" />
+              <span>{errorMessage}</span>
+            </div>
+            {errorMessage.toLowerCase().includes('invalid') && (
+              <p className="text-xs text-rose-700 pl-6.5">
+                New to Netrasaathi?{' '}
+                <Link href="/signup" className="underline font-bold hover:text-rose-900">
+                  Create a free student account
+                </Link>
+                {' '}or click "Use Quick Demo Student Login" below.
+              </p>
+            )}
           </div>
         )}
 
