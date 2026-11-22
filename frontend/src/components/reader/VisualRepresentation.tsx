@@ -22,6 +22,7 @@ interface VisualRepresentationProps {
   blockType: BlockType;
   title?: string;
   explanationText: string;
+  oneLineSummary?: string;
   className?: string;
 }
 
@@ -29,6 +30,7 @@ export function VisualRepresentation({
   blockType,
   title = '',
   explanationText = '',
+  oneLineSummary = '',
   className = '',
 }: VisualRepresentationProps) {
   const lowerTitle = title.toLowerCase();
@@ -671,8 +673,17 @@ export function VisualRepresentation({
   }
 
   // ==========================================
-  // 6. DEFAULT / CONCEPT ILLUSTRATION (for 'text' blocks)
+  // 6. REAL CONCEPT SUMMARY (for 'text' blocks or general sections)
+  // Replaces the fake "Intuitive Visual Metaphor and Takeaway" box with a real one-line summary "In one line"
+  // that is not the first 200 characters of the text. If there is nothing real to show, show nothing.
   // ==========================================
+  const cleanSummary = (oneLineSummary || '').trim();
+  const isDuplicateOfStart = explanationText.trim().toLowerCase().startsWith(cleanSummary.toLowerCase());
+
+  if (!cleanSummary || isDuplicateOfStart || cleanSummary.length < 5) {
+    return null;
+  }
+
   return (
     <div className={`p-4 rounded-xl bg-blue-50/50 border border-blue-200/80 my-3 flex items-start gap-3 ${className}`}>
       <div className="p-2 rounded-lg bg-blue-100 text-blue-700 shrink-0 mt-0.5 border border-blue-200">
@@ -680,10 +691,10 @@ export function VisualRepresentation({
       </div>
       <div className="space-y-1">
         <strong className="text-xs font-bold text-blue-900 block uppercase tracking-wide">
-          Intuitive Visual Metaphor &amp; Takeaway
+          In one line
         </strong>
         <p className="text-xs text-slate-700 leading-relaxed font-normal">
-          {explanationText.length > 200 ? explanationText.slice(0, 200) + '...' : explanationText}
+          {cleanSummary}
         </p>
       </div>
     </div>

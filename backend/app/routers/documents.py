@@ -313,6 +313,7 @@ def get_page_blocks(
             block_type=b.block_type,
             explanation_text=b.explanation_text,
             title=b.title or f"{b.block_type.capitalize()} Section {b.order_index}",
+            one_line_summary=getattr(b, "one_line_summary", None),
             page_number=page.page_number,
         )
         for b in blocks
@@ -367,6 +368,7 @@ def retry_page_processing(
             block_type=b.block_type,
             explanation_text=b.explanation_text,
             title=b.title or f"{b.block_type.capitalize()} Section {b.order_index}",
+            one_line_summary=getattr(b, "one_line_summary", None),
             page_number=page.page_number,
         )
         for b in blocks

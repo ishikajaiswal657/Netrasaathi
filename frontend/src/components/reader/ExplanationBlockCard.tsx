@@ -133,6 +133,7 @@ export function ExplanationBlockCard({
         blockType={block.block_type}
         title={block.title}
         explanationText={block.explanation_text}
+        oneLineSummary={block.one_line_summary}
       />
 
       {/* Spoken Explanation Text */}

@@ -38,7 +38,7 @@ def init_db(target_engine=None):
     global engine, SessionLocal
     # Import all models to ensure they are registered with Base.metadata before create_all
     from backend.app.models.user import User  # noqa: F401
-    from backend.app.models.document import Document, Page, Block  # noqa: F401
+    from backend.app.models.document import Document, Page, Block, PageExplanation  # noqa: F401
     from backend.app.models.audit import AuditLog  # noqa: F401
 
     eng = target_engine or engine

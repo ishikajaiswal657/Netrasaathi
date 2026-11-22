@@ -70,6 +70,10 @@ class TestDocumentUploadAndReading(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        from backend.app.config import get_settings
+        cls.settings = get_settings()
+        cls._orig_key = cls.settings.OPENAI_API_KEY
+        cls.settings.OPENAI_API_KEY = "test"
         Base.metadata.create_all(bind=test_engine)
         import backend.app.database as db_module
         cls._orig_session_local = db_module.SessionLocal
@@ -78,6 +82,7 @@ class TestDocumentUploadAndReading(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        cls.settings.OPENAI_API_KEY = cls._orig_key
         import backend.app.database as db_module
         db_module.SessionLocal = cls._orig_session_local
         Base.metadata.drop_all(bind=test_engine)

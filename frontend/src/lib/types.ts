@@ -75,6 +75,7 @@ export interface ExplanationBlock {
   block_type: BlockType;
   explanation_text: string;
   title?: string;
+  one_line_summary?: string;
 }
 
 export type Block = ExplanationBlock;

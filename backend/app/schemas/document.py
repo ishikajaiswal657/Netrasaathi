@@ -45,6 +45,7 @@ class ExplanationBlockItem(BaseModel):
     block_type: str
     explanation_text: str
     title: str | None = None
+    one_line_summary: str | None = None
     page_number: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
