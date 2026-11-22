@@ -156,9 +156,12 @@ def process_document_background(document_id: int) -> None:
                     # Redact PII
                     sanitized_text, pii_count, _ = PrivacyService.redact_text(text)
                     redacted_img_path = pages_dir / f"page_{page_idx}.png"
-                    PrivacyService.redact_page_image(raw_page_path, word_boxes)
-                    if raw_page_path.exists():
-                        raw_page_path.replace(redacted_img_path)
+                    PrivacyService.redact_page_image(raw_page_path, word_boxes, output_path=redacted_img_path)
+                    if raw_page_path.exists() and raw_page_path != redacted_img_path:
+                        try:
+                            raw_page_path.unlink()
+                        except Exception:
+                            pass
 
                     page_record.image_path = str(redacted_img_path)
                     page_record.ocr_text = sanitized_text

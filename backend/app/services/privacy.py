@@ -215,12 +215,13 @@ class PrivacyService:
             draw = ImageDraw.Draw(rgb_img)
 
             for box in boxes_to_blackout:
-                x0, y0, x1, y1 = box
+                bx0, by0, bx1, by1 = box
+                left = max(0, min(bx0, bx1) - 2)
+                top = max(0, min(by0, by1) - 2)
+                right = max(left, min(rgb_img.width, max(bx0, bx1) + 2))
+                bottom = max(top, min(rgb_img.height, max(by0, by1) + 2))
                 # Expand box by 2 pixels to completely obscure anti-aliased character edges
-                draw.rectangle(
-                    [max(0, x0 - 2), max(0, y0 - 2), min(rgb_img.width, x1 + 2), min(rgb_img.height, y1 + 2)],
-                    fill=(0, 0, 0),
-                )
+                draw.rectangle([left, top, right, bottom], fill=(0, 0, 0))
 
             rgb_img.save(output_path, "PNG")
 
