@@ -89,6 +89,19 @@ export interface PageBlocksResponse {
   blocks: ExplanationBlock[];
 }
 
+export interface PageExplanationResponse {
+  document_id: number | string;
+  page_number: number;
+  total_pages: number;
+  language: string;
+  detail_level: string;
+  page_topic?: string;
+  one_line_summary?: string;
+  page_status?: 'ready' | 'processing' | 'failed';
+  error_message?: string;
+  blocks: ExplanationBlock[];
+}
+
 export interface AskQuestionRequest {
   question: string;
 }

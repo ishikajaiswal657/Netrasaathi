@@ -210,7 +210,7 @@ export function DirectConceptExplainerModal({
               >
                 {SUPPORTED_LANGUAGES.map((lang) => (
                   <option key={lang.code} value={lang.code} className="bg-white text-slate-900">
-                    {lang.nativeName} ({lang.name})
+                    {lang.nativeName === lang.name ? lang.name : `${lang.nativeName} (${lang.name})`}
                   </option>
                 ))}
               </select>

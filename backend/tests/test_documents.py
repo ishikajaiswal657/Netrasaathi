@@ -12,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
 # Use SQLite in-memory for testing
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["TESTING"] = "true"
+os.environ["OPENAI_API_KEY"] = "mock"
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -73,7 +74,7 @@ class TestDocumentUploadAndReading(unittest.TestCase):
         from backend.app.config import get_settings
         cls.settings = get_settings()
         cls._orig_key = cls.settings.OPENAI_API_KEY
-        cls.settings.OPENAI_API_KEY = "test"
+        cls.settings.OPENAI_API_KEY = "mock"
         Base.metadata.create_all(bind=test_engine)
         import backend.app.database as db_module
         cls._orig_session_local = db_module.SessionLocal
@@ -269,6 +270,32 @@ class TestDocumentUploadAndReading(unittest.TestCase):
         # 5. Student B directly attempts to download Student A's page image -> 404
         img_res_b = self.client.get(f"/documents/{doc_id}/pages/1/image", headers=self.headers_b)
         self.assertEqual(img_res_b.status_code, 404)
+
+        # 6. Student B directly attempts to fetch Student A's page explanation -> 404
+        exp_res_b = self.client.get(f"/documents/{doc_id}/pages/1/explanation", headers=self.headers_b)
+        self.assertEqual(exp_res_b.status_code, 404)
+
+    def test_page_explanation_endpoint_for_owner(self):
+        """Verifies that the authenticated owner can retrieve page explanation in chosen language and level."""
+        pdf_bytes = create_sample_pdf()
+        upload_res = self.client.post(
+            "/documents",
+            headers=self.headers_a,
+            files={"file": ("explain_notes.pdf", pdf_bytes, "application/pdf")}
+        )
+        doc_id = upload_res.json()["id"]
+
+        # Fetch explanation in Hindi, standard level
+        exp_res = self.client.get(
+            f"/documents/{doc_id}/pages/1/explanation?lang=hi&level=standard",
+            headers=self.headers_a
+        )
+        self.assertEqual(exp_res.status_code, 200)
+        data = exp_res.json()
+        self.assertEqual(data["language"], "hi")
+        self.assertEqual(data["detail_level"], "standard")
+        self.assertIn("blocks", data)
+        self.assertIsInstance(data["blocks"], list)
 
     def test_secure_page_image_serving_for_owner(self):
         """Verifies that the authenticated document owner can fetch page images."""

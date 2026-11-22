@@ -53,7 +53,7 @@ def generate_speech(req: TTSRequest):
 
         client = OpenAI(api_key=api_key)
 
-        tts_model = getattr(settings, "OPENAI_TTS_MODEL", "tts-1-hd")
+        tts_model = getattr(settings, "OPENAI_TTS_MODEL", "tts-1")
         response = client.audio.speech.create(
             model=tts_model,
             voice=tts_voice,

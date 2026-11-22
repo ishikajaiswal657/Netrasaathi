@@ -1,12 +1,12 @@
 import re
 from pathlib import Path
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
 from backend.app.models.audit import AuditLog
-from backend.app.models.document import Document, Page, Block
+from backend.app.models.document import Document, Page, Block, PageExplanation
 from backend.app.models.user import User
 from backend.app.schemas.document import (
     DocumentListItem,
@@ -15,6 +15,7 @@ from backend.app.schemas.document import (
     PageResponse,
     ExplanationBlockItem,
     PageBlocksResponse,
+    PageExplanationResponse,
     ProcessDocumentResponse,
     AskQuestionRequest,
     AskQuestionResponse
@@ -323,6 +324,89 @@ def get_page_blocks(
         document_id=doc.id,
         page_number=page.page_number,
         total_pages=doc.page_count,
+        page_status=page.status,
+        error_message=page.error_message,
+        blocks=block_items
+    )
+
+
+@router.get(
+    "/{document_id}/pages/{page_number}/explanation",
+    response_model=PageExplanationResponse,
+    summary="Get localized pedagogical explanation of a page for a language and detail level"
+)
+def get_page_explanation(
+    document_id: int,
+    page_number: int,
+    lang: str = Query("en-IN", description="Language code, e.g. hi-IN, en-IN, es-ES"),
+    level: str = Query("detailed", description="Detail level: short, standard, detailed"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns localized, pedagogical explanation blocks for the reader.
+    Uses Stage B extraction and database caching.
+    Enforces multi-tenant ownership: students can only access their own documents.
+    """
+    doc = db.query(Document).filter(
+        Document.id == document_id,
+        Document.user_id == current_user.id
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    page = db.query(Page).filter(
+        Page.document_id == document_id,
+        Page.page_number == page_number
+    ).first()
+    if not page:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found")
+
+    clean_lang = lang.strip() if lang else "en-IN"
+    clean_level = level.strip().lower() if level else "detailed"
+    if clean_level not in ["short", "standard", "detailed"]:
+        clean_level = "detailed"
+
+    # Generate or retrieve Stage B explanation from cache
+    blocks = VisionService.process_page_blocks(
+        page=page,
+        db=db,
+        language=clean_lang,
+        detail_level=clean_level
+    )
+    db.refresh(page)
+
+    cached_exp = db.query(PageExplanation).filter(
+        PageExplanation.page_id == page.id,
+        PageExplanation.language == clean_lang,
+        PageExplanation.detail_level == clean_level
+    ).first()
+
+    one_line_summary = cached_exp.one_line_summary if cached_exp else None
+    page_topic = cached_exp.page_topic if cached_exp else None
+
+    block_items = [
+        ExplanationBlockItem(
+            id=b.id,
+            page_id=b.page_id,
+            order_index=b.order_index,
+            block_type=b.block_type,
+            explanation_text=b.explanation_text,
+            title=b.title or f"{b.block_type.capitalize()} Section {b.order_index}",
+            one_line_summary=getattr(b, "one_line_summary", None),
+            page_number=page.page_number,
+        )
+        for b in blocks
+    ]
+
+    return PageExplanationResponse(
+        document_id=doc.id,
+        page_number=page.page_number,
+        total_pages=doc.page_count,
+        language=clean_lang,
+        detail_level=clean_level,
+        page_topic=page_topic,
+        one_line_summary=one_line_summary,
         page_status=page.status,
         error_message=page.error_message,
         blocks=block_items

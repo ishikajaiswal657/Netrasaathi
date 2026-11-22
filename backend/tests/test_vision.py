@@ -1,6 +1,9 @@
 import base64
 import json
 import os
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+os.environ["TESTING"] = "true"
+os.environ["OPENAI_API_KEY"] = "mock"
 import shutil
 import tempfile
 import unittest
@@ -314,6 +317,82 @@ class TestVisionService(unittest.TestCase):
         self.assertIsNotNone(self.page.error_message)
         self.assertGreaterEqual(len(created_blocks), 1)
         self.assertIn("Page 1", created_blocks[0].title)
+
+    def test_different_text_for_different_language_and_level(self):
+        """Different language and detail level requests must produce distinct localized content."""
+        stage_a = StageAPageExtraction(
+            page_topic="Cybersecurity Cryptography",
+            items=[
+                StageAItem(id="item-1", item_type="definition", content="Diffie-Hellman Key Exchange allows two parties to establish a shared secret."),
+                StageAItem(id="item-2", item_type="formula", content="g^a mod p"),
+            ],
+        )
+        self.page.stage_a_json = stage_a.model_dump_json()
+
+        exp_en_short = StageBExplanation(
+            page_topic="Diffie-Hellman Key Exchange",
+            one_line_summary="Shared key agreement over public channels.",
+            blocks=[
+                StageBBlock(
+                    order_index=1,
+                    block_type="text",
+                    title="Key Exchange Overview",
+                    one_line_summary="Shared key agreement.",
+                    from_notes_text="Diffie-Hellman enables secure key exchange.",
+                    extra_help_text=None,
+                    covered_item_ids=["item-1"],
+                )
+            ],
+            all_covered_item_ids=["item-1"],
+        )
+
+        exp_hi_detailed = StageBExplanation(
+            page_topic="डिफी-हेलमैन कुंजी विनिमय",
+            one_line_summary="सार्वजनिक माध्यम पर सुरक्षित कुंजी विनिमय।",
+            blocks=[
+                StageBBlock(
+                    order_index=1,
+                    block_type="text",
+                    title="डिफी-हेलमैन विधि (Diffie-Hellman)",
+                    one_line_summary="दो पक्ष सुरक्षित कुंजी साझा करते हैं।",
+                    from_notes_text="डिफी-हेलमैन (Diffie-Hellman) तकनीक दो उपयोगकर्ताओं को साझा गुप्त कुंजी बनाने की अनुमति देती है।",
+                    extra_help_text="यह दो रंगों को मिलाने जैसा है जिसे कोई तीसरा अलग नहीं कर सकता।",
+                    covered_item_ids=["item-1", "item-2"],
+                )
+            ],
+            all_covered_item_ids=["item-1", "item-2"],
+        )
+
+        with patch("backend.app.services.vision.settings") as mock_settings:
+            mock_settings.OPENAI_API_KEY = "sk-valid-key"
+            mock_settings.TEXT_MODEL = "gpt-4o-mini"
+            with patch("openai.OpenAI") as mock_openai_cls:
+                mock_client = MagicMock()
+                mock_openai_cls.return_value = mock_client
+
+                # First call: EN short
+                first_comp = MagicMock()
+                first_comp.choices = [MagicMock(message=MagicMock(parsed=exp_en_short))]
+                first_comp.usage = MagicMock(prompt_tokens=80, completion_tokens=40, total_tokens=120)
+
+                # Second call: HI detailed
+                second_comp = MagicMock()
+                second_comp.choices = [MagicMock(message=MagicMock(parsed=exp_hi_detailed))]
+                second_comp.usage = MagicMock(prompt_tokens=90, completion_tokens=70, total_tokens=160)
+
+                mock_client.beta.chat.completions.parse.side_effect = [first_comp, second_comp]
+
+                res_en, _, _ = VisionService.generate_stage_b_explanation(
+                    stage_a=stage_a, language="en-IN", detail_level="short", page_number=1
+                )
+                res_hi, _, _ = VisionService.generate_stage_b_explanation(
+                    stage_a=stage_a, language="hi-IN", detail_level="detailed", page_number=1
+                )
+
+                self.assertNotEqual(res_en.blocks[0].from_notes_text, res_hi.blocks[0].from_notes_text)
+                self.assertIn("Diffie-Hellman", res_en.blocks[0].from_notes_text)
+                self.assertIn("कुंजी", res_hi.blocks[0].from_notes_text)
+                self.assertIsNotNone(res_hi.blocks[0].extra_help_text)
 
     def test_encode_image_to_base64(self):
         """Image encoding must return valid base64 decodable to the original bytes."""

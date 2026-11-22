@@ -57,8 +57,12 @@ function ReaderView() {
   const [rate, setRate] = useState(1.0);
   const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
   const [selectedLanguage, setSelectedLanguage] = useState('en-IN');
+  const [detailLevel, setDetailLevel] = useState('detailed');
+  const [isPreparingExplanation, setIsPreparingExplanation] = useState(false);
   const [showCaptions, setShowCaptions] = useState(true);
   const [currentCaptionText, setCurrentCaptionText] = useState('');
+
+  const isDemoDocument = String(documentId).startsWith('doc-101') || String(documentId) === 'demo';
 
   // Direct Voice Concept Modal & Voice Command Help Modal
   const [isDirectExplainerOpen, setIsDirectExplainerOpen] = useState(false);
@@ -75,6 +79,7 @@ function ReaderView() {
   const currentIdxRef = useRef(0);
   const rateRef = useRef(1.0);
   const langRef = useRef('en-IN');
+  const detailLevelRef = useRef('detailed');
   const playBlockRef = useRef<(idx: number) => void>(() => {});
 
   useEffect(() => {
@@ -96,6 +101,10 @@ function ReaderView() {
   useEffect(() => {
     langRef.current = selectedLanguage;
   }, [selectedLanguage]);
+
+  useEffect(() => {
+    detailLevelRef.current = detailLevel;
+  }, [detailLevel]);
 
   // Core function to speak a specific block
   const playBlockAtIndex = useCallback(
@@ -120,7 +129,7 @@ function ReaderView() {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
 
-      const localized = getLocalizedBlock(block, langRef.current);
+      const localized = getLocalizedBlock(block, langRef.current, isDemoDocument);
       const spokenTitle = localized.title ? `${localized.title}. ` : '';
       const textToSpeak = `${spokenTitle}${localized.text}`;
 
@@ -311,20 +320,80 @@ function ReaderView() {
   );
 
   const handleChangeLanguage = useCallback(
-    (newLang: string) => {
+    async (newLang: string) => {
+      stopSpeech();
+      setIsPlaying(false);
+      setIsPaused(false);
       setSelectedLanguage(newLang);
       langRef.current = newLang;
-      const loc = getLocalizedStrings(newLang);
-      announcePolite(loc.langChanged);
-      if (isPlayingRef.current) {
-        // Read the current card in the new language immediately without overlapping announcements
-        playBlockAtIndex(currentIdxRef.current);
-      } else {
-        // Not actively playing document cards; speak the language confirmation
-        speakText(loc.langChanged, { lang: newLang });
+
+      if (isDemoDocument) {
+        const loc = getLocalizedStrings(newLang);
+        announcePolite(loc.langChanged);
+        return;
+      }
+
+      setIsPreparingExplanation(true);
+      announcePolite(`Preparing explanation in ${newLang}...`);
+
+      try {
+        const explanationData = await api.getPageExplanation(
+          documentId,
+          currentPage,
+          newLang,
+          detailLevelRef.current
+        );
+        setPageData(explanationData);
+        announcePolite(`Explanation loaded in ${newLang}.`);
+        if (explanationData.blocks.length > 0) {
+          playBlockAtIndex(0);
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Could not prepare explanation in selected language.';
+        announceAssertive(`${msg} Keeping previous text.`);
+      } finally {
+        setIsPreparingExplanation(false);
       }
     },
-    [announcePolite, playBlockAtIndex]
+    [documentId, currentPage, isDemoDocument, announcePolite, announceAssertive, playBlockAtIndex]
+  );
+
+  const handleChangeDetailLevel = useCallback(
+    async (newLevel: string) => {
+      stopSpeech();
+      setIsPlaying(false);
+      setIsPaused(false);
+      setDetailLevel(newLevel);
+      detailLevelRef.current = newLevel;
+
+      if (isDemoDocument) {
+        announcePolite(`Detail level set to ${newLevel}.`);
+        return;
+      }
+
+      setIsPreparingExplanation(true);
+      announcePolite(`Preparing ${newLevel} explanation...`);
+
+      try {
+        const explanationData = await api.getPageExplanation(
+          documentId,
+          currentPage,
+          langRef.current,
+          newLevel
+        );
+        setPageData(explanationData);
+        announcePolite(`${newLevel.toUpperCase()} explanation loaded with ${explanationData.blocks.length} cards.`);
+        if (explanationData.blocks.length > 0) {
+          playBlockAtIndex(0);
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Could not prepare explanation for selected detail level.';
+        announceAssertive(`${msg} Keeping previous text.`);
+      } finally {
+        setIsPreparingExplanation(false);
+      }
+    },
+    [documentId, currentPage, isDemoDocument, announcePolite, announceAssertive, playBlockAtIndex]
   );
 
   const handleCycleNextLanguage = useCallback(() => {
@@ -805,6 +874,19 @@ function ReaderView() {
           </div>
         )}
 
+        {/* Preparing Explanation Status Indicator */}
+        {isPreparingExplanation && (
+          <aside
+            role="status"
+            className="p-4 rounded-2xl bg-indigo-50 border-2 border-indigo-200 text-indigo-900 flex items-center gap-3 shadow-xs animate-pulse"
+          >
+            <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin shrink-0" aria-hidden="true" />
+            <p className="text-sm font-bold">
+              Preparing pedagogical explanation in {selectedLanguage} ({detailLevel})...
+            </p>
+          </aside>
+        )}
+
         {/* Explanation Blocks Ordered List */}
         {!isLoading && pageData && pageData.blocks.length > 0 && (
           <section aria-label="Explanation cards on this page" className="space-y-6">
@@ -824,6 +906,7 @@ function ReaderView() {
                   key={block.id}
                   block={block}
                   isActive={isPlaying && currentBlockIndex === idx}
+                  isDemo={isDemoDocument}
                   onReadBlock={handleReadSingleBlock}
                 />
               ))}
@@ -840,6 +923,7 @@ function ReaderView() {
             currentBlockIndex={currentBlockIndex}
             totalBlocks={pageData.blocks.length}
             selectedLanguage={selectedLanguage}
+            selectedDetailLevel={detailLevel}
             showCaptions={showCaptions}
             onPlay={handlePlay}
             onPause={handlePause}
@@ -850,6 +934,7 @@ function ReaderView() {
             onPrevious={handlePrevious}
             onChangeRate={handleChangeRate}
             onChangeLanguage={handleChangeLanguage}
+            onChangeDetailLevel={handleChangeDetailLevel}
             onToggleCaptions={() => setShowCaptions((prev) => !prev)}
           />
         )}

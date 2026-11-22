@@ -61,6 +61,22 @@ class PageBlocksResponse(BaseModel):
     blocks: list[ExplanationBlockItem]
 
 
+class PageExplanationResponse(BaseModel):
+    """Localized, pedagogical explanation response for a specific page, language, and detail level."""
+    document_id: int
+    page_number: int
+    total_pages: int
+    language: str
+    detail_level: str
+    page_topic: str | None = None
+    one_line_summary: str | None = None
+    page_status: str = "ready"
+    error_message: str | None = None
+    blocks: list[ExplanationBlockItem]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class DocumentStatusResponse(BaseModel):
     """Real-time processing status of a document and its pages."""
     id: int

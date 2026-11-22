@@ -927,9 +927,18 @@ const BLOCK_TRANSLATIONS: Record<string, Record<string, { title: string; text: s
   },
 };
 
-export function getLocalizedBlock(block: ExplanationBlock, langCode: string): { title: string; text: string } {
+/**
+ * Resolves localized block content.
+ * Real documents are generated directly in the selected language by the backend Stage B engine.
+ * BLOCK_TRANSLATIONS is strictly isolated as sample fallback for mock demo documents (e.g. doc-101).
+ */
+export function getLocalizedBlock(
+  block: ExplanationBlock,
+  langCode: string,
+  isDemoDocument: boolean = false
+): { title: string; text: string } {
   const blockId = String(block.id || '');
-  if (BLOCK_TRANSLATIONS[blockId] && BLOCK_TRANSLATIONS[blockId][langCode]) {
+  if (isDemoDocument && BLOCK_TRANSLATIONS[blockId] && BLOCK_TRANSLATIONS[blockId][langCode]) {
     return BLOCK_TRANSLATIONS[blockId][langCode];
   }
   return {

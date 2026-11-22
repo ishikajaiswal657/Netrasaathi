@@ -17,12 +17,14 @@ import { VisualRepresentation } from './VisualRepresentation';
 interface ExplanationBlockCardProps {
   block: Block;
   isActive: boolean;
+  isDemo?: boolean;
   onReadBlock: (block: Block) => void;
 }
 
 export function ExplanationBlockCard({
   block,
   isActive,
+  isDemo = false,
   onReadBlock,
 }: ExplanationBlockCardProps) {
   const typeDetails = getBlockTypeDetails(block.block_type);
@@ -134,6 +136,7 @@ export function ExplanationBlockCard({
         title={block.title}
         explanationText={block.explanation_text}
         oneLineSummary={block.one_line_summary}
+        isDemo={isDemo}
       />
 
       {/* Spoken Explanation Text */}

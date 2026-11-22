@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { formatBytes, getBlockTypeDetails, getStatusDetails } from '../lib/utils';
 import { parseVoiceCommand, SUPPORTED_LANGUAGES, splitIntoSentences, detectScript } from '../lib/speech';
 import { shouldShowDemoBanner } from '../components/ui/DemoBanner';
+import { getLocalizedBlock } from '../lib/multilingual';
+import { ExplanationBlock } from '../lib/types';
 import {
   MOCK_STUDENT_USER,
   MOCK_ADMIN_USER,
@@ -286,5 +288,41 @@ describe('Production Environment UI Guards', () => {
   it('shows developer status bar in development mode', () => {
     assert.equal(shouldShowDemoBanner('development', undefined), true);
     assert.equal(shouldShowDemoBanner('development', 'false'), true);
+  });
+});
+
+describe('Phase 10: Real Multilingual Translation & Visual Grounding', () => {
+  it('real blocks never use BLOCK_TRANSLATIONS when isDemo is false', () => {
+    const realStudentBlock: ExplanationBlock = {
+      id: 5432,
+      order_index: 1,
+      block_type: 'text',
+      title: 'Operating System Kernel Architecture',
+      explanation_text: 'The microkernel architecture isolates memory management into separate user-space servers.',
+    };
+
+    // Even if requested in Hindi, a real block without isDemo must not use BLOCK_TRANSLATIONS
+    const localized = getLocalizedBlock(realStudentBlock, 'hi-IN', false);
+    assert.equal(localized.title, realStudentBlock.title);
+    assert.equal(localized.text, realStudentBlock.explanation_text);
+  });
+
+  it('demo blocks use BLOCK_TRANSLATIONS only when isDemo is explicitly true', () => {
+    const demoBlock: ExplanationBlock = {
+      id: 'b-101-1-1',
+      order_index: 1,
+      block_type: 'diagram',
+      title: '7-Layer OSI Reference Model',
+      explanation_text: 'The OSI model has seven logical abstraction layers.',
+    };
+
+    // With isDemo = true, it returns Hindi translation
+    const localizedDemo = getLocalizedBlock(demoBlock, 'hi-IN', true);
+    assert.ok(localizedDemo.title.includes('ओएसआई') || localizedDemo.text.includes('लेयर'));
+
+    // With isDemo = false (real document matching same ID), it refuses mock translations
+    const localizedReal = getLocalizedBlock(demoBlock, 'hi-IN', false);
+    assert.equal(localizedReal.title, demoBlock.title);
+    assert.equal(localizedReal.text, demoBlock.explanation_text);
   });
 });

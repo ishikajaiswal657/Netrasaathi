@@ -13,6 +13,7 @@ import {
   DocumentItem,
   DocumentStatusResponse,
   PageBlocksResponse,
+  PageExplanationResponse,
   AskQuestionResponse,
   AuditLogItem,
   AdminStatsResponse,
@@ -481,6 +482,37 @@ export const api = {
     }
     return request<PageBlocksResponse>(
       `/documents/${documentId}/pages/${pageNumber}/blocks`,
+      {
+        method: 'GET',
+      },
+      token
+    );
+  },
+
+  /**
+   * Fetch Localized Pedagogical Explanation for a Page
+   * Route: GET /documents/{id}/pages/{n}/explanation?lang={lang}&level={level}
+   */
+  async getPageExplanation(
+    documentId: string | number,
+    pageNumber: number,
+    language: string = 'en-IN',
+    detailLevel: string = 'detailed',
+    token?: string | null
+  ): Promise<PageExplanationResponse> {
+    if (isMockModeActive()) {
+      const base = await mockAdapter.getDocumentBlocks(documentId, pageNumber);
+      return {
+        ...base,
+        language,
+        detail_level: detailLevel,
+        one_line_summary: base.blocks[0]?.title || 'Study notes overview',
+      };
+    }
+    const cleanLang = encodeURIComponent(language);
+    const cleanLevel = encodeURIComponent(detailLevel);
+    return request<PageExplanationResponse>(
+      `/documents/${documentId}/pages/${pageNumber}/explanation?lang=${cleanLang}&level=${cleanLevel}`,
       {
         method: 'GET',
       },
