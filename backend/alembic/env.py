@@ -17,7 +17,7 @@ for p in [str(root_dir), str(backend_dir)]:
 from backend.app.database import Base, normalize_database_url
 from backend.app.config import get_settings
 from backend.app.models.user import User  # noqa: F401
-from backend.app.models.document import Document, Page, Block  # noqa: F401
+from backend.app.models.document import Document, Page, Block, PageExplanation  # noqa: F401
 from backend.app.models.audit import AuditLog  # noqa: F401
 
 # this is the Alembic Config object, which provides

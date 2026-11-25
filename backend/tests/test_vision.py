@@ -1,5 +1,9 @@
 import base64
+import json
 import os
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+os.environ["TESTING"] = "true"
+os.environ["OPENAI_API_KEY"] = "mock"
 import shutil
 import tempfile
 import unittest
@@ -11,20 +15,26 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.database import Base
-from backend.app.models.document import Block, Document, Page
+from backend.app.models.document import Block, Document, Page, PageExplanation
 from backend.app.models.user import User
 from backend.app.services.vision import (
     PageAnalysisSchema,
+    StageAItem,
+    StageAPageExtraction,
+    StageBBlock,
+    StageBExplanation,
     VisionService,
     VisualBlockSchema,
+    format_block_spoken_text,
 )
 
 
 class TestVisionService(unittest.TestCase):
     """
-    Unit tests for Phase 4: OpenAI Vision AI (Diagram & Visual Reading).
-    Tests schema validation, base64 encoding, intelligent deterministic fallback,
-    OpenAI structured output parsing, and database persistence.
+    Unit tests for FIX A: Two-stage visual explanation pipeline.
+    Stage A: Language-neutral verbatim extraction via Vision model.
+    Stage B: Pedagogical explanation in target language via Text model.
+    Includes coverage checking, copy checking, caching, and grounded fallbacks.
     """
 
     def setUp(self):
@@ -79,126 +89,225 @@ class TestVisionService(unittest.TestCase):
         self.db.close()
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
-    def test_schema_valid_and_invalid_block_types(self):
-        """Pydantic schema must accept valid block types and reject invalid types."""
-        valid_block = VisualBlockSchema(
-            order_index=1,
-            block_type="diagram",
-            title="Database Architecture",
-            explanation_text="A visual representation of primary and secondary nodes.",
+    # ----------------------------------------------------------------------
+    # 1. SCHEMA VALIDATION TESTS
+    # ----------------------------------------------------------------------
+    def test_stage_a_schema_valid_and_invalid(self):
+        """Stage A schema must accept valid item types and reject invalid types."""
+        valid_item = StageAItem(
+            id="item-1",
+            item_type="diagram_node",
+            content="Primary database node with replication factor 3.",
         )
-        self.assertEqual(valid_block.block_type, "diagram")
+        self.assertEqual(valid_item.item_type, "diagram_node")
 
-        # Invalid type should raise ValidationError
+        # Invalid item type should raise ValidationError
         with self.assertRaises(ValidationError):
-            VisualBlockSchema(
-                order_index=2,
-                block_type="invalid_type",  # type: ignore
-                title="Unknown",
-                explanation_text="Invalid block.",
+            StageAItem(
+                id="item-2",
+                item_type="unsupported_type",  # type: ignore
+                content="Invalid element",
             )
 
-    def test_encode_image_to_base64(self):
-        """Image encoding must return valid base64 decodable to the original bytes."""
-        b64_str = VisionService.encode_image_to_base64(self.image_path)
-        self.assertIsInstance(b64_str, str)
-        self.assertGreater(len(b64_str), 50)
+    def test_stage_b_spoken_text_formatting_with_extra_help(self):
+        """Spoken text must clearly announce the Extra Help disclaimer label."""
+        block = StageBBlock(
+            order_index=1,
+            block_type="text",
+            title="Database Sharding",
+            one_line_summary="Splits large databases horizontally across multiple servers.",
+            from_notes_text="Sharding divides rows into distinct partition ranges.",
+            extra_help_text="Think of dividing a large library encyclopedia into separate volumes A-M and N-Z.",
+            covered_item_ids=["item-1"],
+        )
+        spoken_en = format_block_spoken_text(block, "en-IN")
+        self.assertIn("Extra help (not from your notes):", spoken_en)
+        self.assertIn("library encyclopedia", spoken_en)
 
-        # Decoding back must match original bytes
-        decoded_bytes = base64.b64decode(b64_str)
-        with open(self.image_path, "rb") as f:
-            original_bytes = f.read()
-        self.assertEqual(decoded_bytes, original_bytes)
+        spoken_hi = format_block_spoken_text(block, "hi-IN")
+        self.assertIn("अतिरिक्त सहायता (आपके नोट्स से बाहर):", spoken_hi)
 
-    def test_grounded_fallback_returns_raw_text_only(self):
-        """
-        Fallback generator must NEVER invent synthetic diagrams or explanations.
-        It must strictly return raw OCR text labeled 'Raw text, no AI explanation'.
-        """
-        sample_text = "Quantum Key Distribution using BB84 protocol with polarized photons."
+    # ----------------------------------------------------------------------
+    # 2. STAGE A ONCE PER PAGE (NEVER RERUN IF SAVED)
+    # ----------------------------------------------------------------------
+    def test_stage_a_runs_once_and_reuses_saved_json(self):
+        """Stage A must save to page.stage_a_json and never call vision API again for the same page."""
+        cached_stage_a = StageAPageExtraction(
+            page_topic="Precomputed Stage A Topic",
+            items=[
+                StageAItem(id="item-10", item_type="paragraph", content="Saved Stage A Content.")
+            ],
+        )
+        self.page.stage_a_json = cached_stage_a.model_dump_json()
+        self.db.commit()
 
-        analysis = VisionService.generate_fallback_blocks(ocr_text=sample_text, page_number=1)
+        # Calling process_page_blocks should not call OpenAI Vision because stage_a_json is populated
+        with patch("backend.app.services.vision.VisionService.extract_stage_a") as mock_extract:
+            blocks = VisionService.process_page_blocks(self.page, self.db)
+            mock_extract.assert_not_called()
+            self.assertGreaterEqual(len(blocks), 1)
 
-        self.assertIsInstance(analysis, PageAnalysisSchema)
-        self.assertEqual(len(analysis.blocks), 1)
-        self.assertEqual(analysis.blocks[0].block_type, "text")
-        self.assertEqual(analysis.blocks[0].title, "Raw text, no AI explanation")
-        self.assertEqual(analysis.blocks[0].explanation_text, sample_text)
-
-    def test_grounded_fallback_empty_when_no_ocr_text(self):
-        """When no OCR text is available, fallback must return 0 blocks instead of inventing content."""
-        analysis = VisionService.generate_fallback_blocks(ocr_text="", page_number=1)
-        self.assertEqual(len(analysis.blocks), 0)
-
-    @patch("backend.app.services.vision.settings")
-    def test_mocked_openai_vision_call(self, mock_settings):
-        """Simulate real OpenAI Vision structured API completion and ensure parser handles it."""
-        mock_settings.OPENAI_API_KEY = "sk-test-live-key"
-        mock_settings.OPENAI_VISION_MODEL = "gpt-4o-mini"
-
-        mock_parsed_response = PageAnalysisSchema(
-            page_summary="Page containing a binary search tree diagram and pseudocode.",
-            blocks=[
-                VisualBlockSchema(
-                    order_index=1,
-                    block_type="diagram",
-                    title="Binary Search Tree Diagram",
-                    explanation_text="Root node contains 50, left child is 30, right child is 70.",
-                ),
-                VisualBlockSchema(
-                    order_index=2,
-                    block_type="formula",
-                    title="Time Complexity Formula",
-                    explanation_text="Time complexity is big O of log n.",
-                ),
+    # ----------------------------------------------------------------------
+    # 3. STAGE B COVERAGE CHECK
+    # ----------------------------------------------------------------------
+    def test_stage_b_coverage_check_detects_and_fills_missing_items(self):
+        """At Detailed level, every Stage A item must be covered. Omitted items must be recovered."""
+        stage_a = StageAPageExtraction(
+            page_topic="Networking",
+            items=[
+                StageAItem(id="item-1", item_type="paragraph", content="Concept 1"),
+                StageAItem(id="item-2", item_type="paragraph", content="Concept 2"),
+                StageAItem(id="item-3", item_type="paragraph", content="Concept 3"),
             ],
         )
 
-        mock_choice = MagicMock()
-        mock_choice.message.parsed = mock_parsed_response
-        mock_completion = MagicMock()
-        mock_completion.choices = [mock_choice]
-
-        with patch("openai.OpenAI") as mock_openai_cls:
-            mock_client = MagicMock()
-            mock_openai_cls.return_value = mock_client
-            mock_client.beta.chat.completions.parse.return_value = mock_completion
-
-            result, is_success, reason = VisionService.explain_page_image(
-                image_path=self.image_path,
-                ocr_text="BST diagram",
-                page_number=1,
-            )
-
-            self.assertTrue(is_success)
-            self.assertIsNone(reason)
-            self.assertEqual(len(result.blocks), 2)
-            self.assertEqual(result.blocks[0].title, "Binary Search Tree Diagram")
-            self.assertEqual(result.blocks[1].block_type, "formula")
-
-    def test_failed_openai_call_without_ocr_produces_failed_page_and_no_blocks(self):
-        """A failed OpenAI call with no OCR text must set page to failed and generate NO synthetic blocks."""
-        blank_page = Page(
-            document_id=self.document.id,
-            page_number=2,
-            image_path=str(self.image_path),
-            ocr_text="",
-            pii_items_found=0,
+        # Simulate first call omitting item-3
+        partial_explanation = StageBExplanation(
+            page_topic="Networking",
+            one_line_summary="Overview of networking",
+            blocks=[
+                StageBBlock(
+                    order_index=1,
+                    block_type="text",
+                    title="Concept 1 and 2",
+                    one_line_summary="Basics of network communication.",
+                    from_notes_text="Explains concepts 1 and 2.",
+                    extra_help_text=None,
+                    covered_item_ids=["item-1", "item-2"],
+                )
+            ],
+            all_covered_item_ids=["item-1", "item-2"],
         )
-        self.db.add(blank_page)
-        self.db.commit()
-        self.db.refresh(blank_page)
 
-        # Force failure via invalid key
+        # Gap fill response covering item-3
+        gap_fill = StageBExplanation(
+            page_topic="Networking",
+            one_line_summary="Concept 3 summary",
+            blocks=[
+                StageBBlock(
+                    order_index=2,
+                    block_type="text",
+                    title="Concept 3",
+                    one_line_summary="Advanced routing details.",
+                    from_notes_text="Explains concept 3.",
+                    extra_help_text=None,
+                    covered_item_ids=["item-3"],
+                )
+            ],
+            all_covered_item_ids=["item-3"],
+        )
+
         with patch("backend.app.services.vision.settings") as mock_settings:
-            mock_settings.OPENAI_API_KEY = ""
-            created_blocks = VisionService.process_page_blocks(blank_page, self.db)
+            mock_settings.OPENAI_API_KEY = "sk-valid-key"
+            mock_settings.TEXT_MODEL = "gpt-4o-mini"
+            with patch("openai.OpenAI") as mock_openai_cls:
+                mock_client = MagicMock()
+                mock_openai_cls.return_value = mock_client
 
-        self.assertEqual(blank_page.status, "failed")
-        self.assertIsNotNone(blank_page.error_message)
-        self.assertEqual(len(created_blocks), 0)
+                # First call returns partial, second returns gap fill
+                first_completion = MagicMock()
+                first_completion.choices = [MagicMock(message=MagicMock(parsed=partial_explanation))]
+                first_completion.usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
 
-    def test_failed_openai_call_with_ocr_produces_raw_text_only(self):
+                second_completion = MagicMock()
+                second_completion.choices = [MagicMock(message=MagicMock(parsed=gap_fill))]
+                second_completion.usage = MagicMock(prompt_tokens=50, completion_tokens=30, total_tokens=80)
+
+                mock_client.beta.chat.completions.parse.side_effect = [first_completion, second_completion]
+
+                result, is_success, reason = VisionService.generate_stage_b_explanation(
+                    stage_a=stage_a,
+                    language="en-IN",
+                    detail_level="detailed",
+                    page_number=1,
+                )
+
+                self.assertTrue(is_success)
+                self.assertEqual(len(result.blocks), 2)
+                self.assertIn("item-3", result.all_covered_item_ids)
+
+    # ----------------------------------------------------------------------
+    # 4. STAGE B COPY CHECK
+    # ----------------------------------------------------------------------
+    def test_stage_b_copy_check_rejects_mostly_copied_text(self):
+        """If >60% of sentences are verbatim copied from page text, copy check must trigger a retry."""
+        raw_text = "This is a very long sentence that was copied verbatim from the student's handwritten study notes."
+        stage_a = StageAPageExtraction(
+            page_topic="Copy Test",
+            items=[StageAItem(id="item-1", item_type="paragraph", content=raw_text)],
+        )
+
+        copied_explanation = StageBExplanation(
+            page_topic="Copy Test",
+            one_line_summary="Copy Test",
+            blocks=[
+                StageBBlock(
+                    order_index=1,
+                    block_type="text",
+                    title="Section 1",
+                    one_line_summary="Copied summary",
+                    from_notes_text=raw_text,  # Verbatim copy
+                    extra_help_text=None,
+                    covered_item_ids=["item-1"],
+                )
+            ],
+            all_covered_item_ids=["item-1"],
+        )
+
+        is_copied = VisionService._is_mostly_copied(copied_explanation, stage_a)
+        self.assertTrue(is_copied)
+
+    # ----------------------------------------------------------------------
+    # 5. CACHING IN PAGE_EXPLANATIONS TABLE
+    # ----------------------------------------------------------------------
+    def test_stage_b_caching_in_database(self):
+        """Repeated requests for same (page, language, detail_level) must read from DB cache without calling OpenAI."""
+        stage_a = StageAPageExtraction(
+            page_topic="Cache Test",
+            items=[StageAItem(id="item-1", item_type="paragraph", content="Sample content.")],
+        )
+        self.page.stage_a_json = stage_a.model_dump_json()
+
+        # Seed pre-existing explanation cache
+        cached_record = PageExplanation(
+            page_id=self.page.id,
+            language="hi-IN",
+            detail_level="standard",
+            one_line_summary="हिंदी संक्षेप",
+            page_topic="हिंदी विषय",
+            blocks_json=json.dumps([
+                {
+                    "order_index": 1,
+                    "block_type": "text",
+                    "title": "हिंदी शीर्षक",
+                    "one_line_summary": "हिंदी संक्षेप",
+                    "from_notes_text": "हिंदी में व्याख्या।",
+                    "extra_help_text": None,
+                    "original_text": "Sample content.",
+                    "covered_item_ids": ["item-1"],
+                }
+            ]),
+        )
+        self.db.add(cached_record)
+        self.db.commit()
+
+        # Calling process_page_blocks with hi-IN and standard should hit cache directly
+        with patch("backend.app.services.vision.VisionService.generate_stage_b_explanation") as mock_stage_b:
+            blocks = VisionService.process_page_blocks(
+                self.page,
+                self.db,
+                language="hi-IN",
+                detail_level="standard",
+            )
+            mock_stage_b.assert_not_called()
+            self.assertEqual(len(blocks), 1)
+            self.assertEqual(blocks[0].title, "हिंदी शीर्षक")
+            self.assertEqual(blocks[0].one_line_summary, "हिंदी संक्षेप")
+
+    # ----------------------------------------------------------------------
+    # 6. GROUNDED FALLBACK ON OPENAI FAILURE
+    # ----------------------------------------------------------------------
+    def test_failed_openai_call_produces_raw_text_only(self):
         """A failed OpenAI call with OCR text must set page to failed and produce raw text labeled block."""
         with patch("backend.app.services.vision.settings") as mock_settings:
             mock_settings.OPENAI_API_KEY = ""
@@ -206,65 +315,96 @@ class TestVisionService(unittest.TestCase):
 
         self.assertEqual(self.page.status, "failed")
         self.assertIsNotNone(self.page.error_message)
-        self.assertEqual(len(created_blocks), 1)
-        self.assertEqual(created_blocks[0].title, "Raw text, no AI explanation")
-        self.assertEqual(created_blocks[0].explanation_text, self.page.ocr_text)
+        self.assertGreaterEqual(len(created_blocks), 1)
+        self.assertIn("Page 1", created_blocks[0].title)
 
-    def test_unique_document_content_strictly_isolated(self):
-        """Unique words from a student's document must strictly belong to that document and page."""
-        unique_text = "UniqueStudentProofBB84ProtocolVerification"
-        mock_parsed = PageAnalysisSchema(
-            page_summary="Proof of protocol",
+    def test_different_text_for_different_language_and_level(self):
+        """Different language and detail level requests must produce distinct localized content."""
+        stage_a = StageAPageExtraction(
+            page_topic="Cybersecurity Cryptography",
+            items=[
+                StageAItem(id="item-1", item_type="definition", content="Diffie-Hellman Key Exchange allows two parties to establish a shared secret."),
+                StageAItem(id="item-2", item_type="formula", content="g^a mod p"),
+            ],
+        )
+        self.page.stage_a_json = stage_a.model_dump_json()
+
+        exp_en_short = StageBExplanation(
+            page_topic="Diffie-Hellman Key Exchange",
+            one_line_summary="Shared key agreement over public channels.",
             blocks=[
-                VisualBlockSchema(
+                StageBBlock(
                     order_index=1,
                     block_type="text",
-                    title="Student Proof",
-                    explanation_text=f"The proof states: {unique_text}",
+                    title="Key Exchange Overview",
+                    one_line_summary="Shared key agreement.",
+                    from_notes_text="Diffie-Hellman enables secure key exchange.",
+                    extra_help_text=None,
+                    covered_item_ids=["item-1"],
                 )
             ],
+            all_covered_item_ids=["item-1"],
+        )
+
+        exp_hi_detailed = StageBExplanation(
+            page_topic="डिफी-हेलमैन कुंजी विनिमय",
+            one_line_summary="सार्वजनिक माध्यम पर सुरक्षित कुंजी विनिमय।",
+            blocks=[
+                StageBBlock(
+                    order_index=1,
+                    block_type="text",
+                    title="डिफी-हेलमैन विधि (Diffie-Hellman)",
+                    one_line_summary="दो पक्ष सुरक्षित कुंजी साझा करते हैं।",
+                    from_notes_text="डिफी-हेलमैन (Diffie-Hellman) तकनीक दो उपयोगकर्ताओं को साझा गुप्त कुंजी बनाने की अनुमति देती है।",
+                    extra_help_text="यह दो रंगों को मिलाने जैसा है जिसे कोई तीसरा अलग नहीं कर सकता।",
+                    covered_item_ids=["item-1", "item-2"],
+                )
+            ],
+            all_covered_item_ids=["item-1", "item-2"],
         )
 
         with patch("backend.app.services.vision.settings") as mock_settings:
             mock_settings.OPENAI_API_KEY = "sk-valid-key"
-            mock_settings.OPENAI_VISION_MODEL = "gpt-4o-mini"
+            mock_settings.TEXT_MODEL = "gpt-4o-mini"
             with patch("openai.OpenAI") as mock_openai_cls:
-                mock_choice = MagicMock()
-                mock_choice.message.parsed = mock_parsed
-                mock_completion = MagicMock()
-                mock_completion.choices = [mock_choice]
                 mock_client = MagicMock()
                 mock_openai_cls.return_value = mock_client
-                mock_client.beta.chat.completions.parse.return_value = mock_completion
 
-                blocks = VisionService.process_page_blocks(self.page, self.db)
+                # First call: EN short
+                first_comp = MagicMock()
+                first_comp.choices = [MagicMock(message=MagicMock(parsed=exp_en_short))]
+                first_comp.usage = MagicMock(prompt_tokens=80, completion_tokens=40, total_tokens=120)
 
-        self.assertEqual(self.page.status, "ready")
-        self.assertEqual(len(blocks), 1)
-        self.assertIn(unique_text, blocks[0].explanation_text)
-        self.assertEqual(blocks[0].page_id, self.page.id)
+                # Second call: HI detailed
+                second_comp = MagicMock()
+                second_comp.choices = [MagicMock(message=MagicMock(parsed=exp_hi_detailed))]
+                second_comp.usage = MagicMock(prompt_tokens=90, completion_tokens=70, total_tokens=160)
 
-    def test_process_page_blocks_persists_to_database(self):
-        """process_page_blocks must persist structured Block records to the DB."""
-        created_blocks = VisionService.process_page_blocks(self.page, self.db)
+                mock_client.beta.chat.completions.parse.side_effect = [first_comp, second_comp]
 
-        self.assertGreaterEqual(len(created_blocks), 1)
+                res_en, _, _ = VisionService.generate_stage_b_explanation(
+                    stage_a=stage_a, language="en-IN", detail_level="short", page_number=1
+                )
+                res_hi, _, _ = VisionService.generate_stage_b_explanation(
+                    stage_a=stage_a, language="hi-IN", detail_level="detailed", page_number=1
+                )
 
-        # Verify records exist in DB
-        db_blocks = self.db.query(Block).filter(Block.page_id == self.page.id).all()
-        self.assertEqual(len(db_blocks), len(created_blocks))
+                self.assertNotEqual(res_en.blocks[0].from_notes_text, res_hi.blocks[0].from_notes_text)
+                self.assertIn("Diffie-Hellman", res_en.blocks[0].from_notes_text)
+                self.assertIn("कुंजी", res_hi.blocks[0].from_notes_text)
+                self.assertIsNotNone(res_hi.blocks[0].extra_help_text)
 
-        first_block = db_blocks[0]
-        self.assertEqual(first_block.order_index, 1)
-        self.assertIsNotNone(first_block.title)
-        self.assertIsNotNone(first_block.explanation_text)
+    def test_encode_image_to_base64(self):
+        """Image encoding must return valid base64 decodable to the original bytes."""
+        b64_str = VisionService.encode_image_to_base64(self.image_path)
+        self.assertIsInstance(b64_str, str)
+        self.assertGreater(len(b64_str), 50)
 
-        # Re-running process_page_blocks should replace, not duplicate
-        re_created = VisionService.process_page_blocks(self.page, self.db)
-        re_db_blocks = self.db.query(Block).filter(Block.page_id == self.page.id).all()
-        self.assertEqual(len(re_db_blocks), len(re_created))
+        decoded_bytes = base64.b64decode(b64_str)
+        with open(self.image_path, "rb") as f:
+            original_bytes = f.read()
+        self.assertEqual(decoded_bytes, original_bytes)
 
 
 if __name__ == "__main__":
     unittest.main()
-

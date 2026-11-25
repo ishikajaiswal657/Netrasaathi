@@ -10,6 +10,7 @@ import {
   Square,
   Gauge,
   Globe,
+  SlidersHorizontal,
   Subtitles,
   Keyboard,
 } from 'lucide-react';
@@ -22,6 +23,7 @@ interface AudioControlsProps {
   currentBlockIndex: number;
   totalBlocks: number;
   selectedLanguage: string;
+  selectedDetailLevel?: string;
   showCaptions: boolean;
   onPlay: () => void;
   onPause: () => void;
@@ -32,6 +34,7 @@ interface AudioControlsProps {
   onPrevious: () => void;
   onChangeRate: (rate: number) => void;
   onChangeLanguage: (lang: string) => void;
+  onChangeDetailLevel?: (level: string) => void;
   onToggleCaptions: () => void;
   disabled?: boolean;
 }
@@ -43,6 +46,7 @@ export function AudioControls({
   currentBlockIndex,
   totalBlocks,
   selectedLanguage,
+  selectedDetailLevel = 'detailed',
   showCaptions,
   onPlay,
   onPause,
@@ -53,6 +57,7 @@ export function AudioControls({
   onPrevious,
   onChangeRate,
   onChangeLanguage,
+  onChangeDetailLevel,
   onToggleCaptions,
   disabled = false,
 }: AudioControlsProps) {
@@ -239,11 +244,32 @@ export function AudioControls({
             >
               {SUPPORTED_LANGUAGES.map((lang) => (
                 <option key={lang.code} value={lang.code} className="bg-white text-slate-900">
-                  {lang.name} ({lang.nativeName})
+                  {lang.name === lang.nativeName ? lang.name : `${lang.name} (${lang.nativeName})`}
                 </option>
               ))}
             </select>
           </div>
+
+          {/* Detail Level Selector (Short, Standard, Detailed) */}
+          {onChangeDetailLevel && (
+            <div className="relative flex items-center bg-slate-100 px-2 py-1.5 rounded-xl border border-slate-200">
+              <SlidersHorizontal className="h-3.5 w-3.5 text-indigo-600 shrink-0 mr-1.5" aria-hidden="true" />
+              <label htmlFor="detail-level-select" className="sr-only">
+                Choose Explanation Detail Level
+              </label>
+              <select
+                id="detail-level-select"
+                value={selectedDetailLevel}
+                onChange={(e) => onChangeDetailLevel(e.target.value)}
+                className="bg-transparent text-xs text-slate-900 font-bold focus:outline-hidden cursor-pointer"
+                aria-label="Select explanation detail level"
+              >
+                <option value="detailed" className="bg-white text-slate-900">Detailed</option>
+                <option value="standard" className="bg-white text-slate-900">Standard</option>
+                <option value="short" className="bg-white text-slate-900">Short</option>
+              </select>
+            </div>
+          )}
 
           {/* Captions Toggle for Desktop */}
           <button

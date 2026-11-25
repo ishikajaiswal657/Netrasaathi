@@ -36,7 +36,8 @@ try:
         OPENAI_API_KEY: str = ""
         MODEL_NAME: str = "gpt-4o-mini"
         OPENAI_VISION_MODEL: str = "gpt-4o-mini"
-        OPENAI_TTS_MODEL: str = "tts-1-hd"
+        TEXT_MODEL: str = "gpt-4o-mini"
+        OPENAI_TTS_MODEL: str = "tts-1"
         OPENAI_TTS_VOICE: str = "nova"
 
         # Upload & Storage constraints
@@ -85,7 +86,8 @@ except ImportError:
         OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
         MODEL_NAME: str = os.getenv("MODEL_NAME", "gpt-4o-mini")
         OPENAI_VISION_MODEL: str = os.getenv("OPENAI_VISION_MODEL", "gpt-4o-mini")
-        OPENAI_TTS_MODEL: str = os.getenv("OPENAI_TTS_MODEL", "tts-1-hd")
+        TEXT_MODEL: str = os.getenv("TEXT_MODEL", "gpt-4o-mini")
+        OPENAI_TTS_MODEL: str = os.getenv("OPENAI_TTS_MODEL", "tts-1")
         OPENAI_TTS_VOICE: str = os.getenv("OPENAI_TTS_VOICE", "nova")
 
         UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "uploads")
